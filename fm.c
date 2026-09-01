@@ -1,4 +1,5 @@
 #define _POSIX_C_SOURCE 200809L
+#define _GNU_SOURCE
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -8,6 +9,7 @@
 #include <sys/wait.h>
 #include <unistd.h>
 #include <fcntl.h>
+#include <limits.h>
 #include <time.h>
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>
@@ -26,6 +28,7 @@
 #define MARGIN 10
 #define LINE_HEIGHT 24
 #define INFO_HEIGHT 28
+#define PATH_HEIGHT 28
 
 typedef struct {
     char *name;
@@ -166,6 +169,28 @@ char *load_html_preview(const char *path) {
     return buffer;
 }
 
+char *get_absolute_path(const char *path) {
+    char buf[4096];
+    if (realpath(path, buf)) {
+        return strdup(buf);
+    }
+    return strdup(path);
+}
+
+char *get_display_path(const char *path) {
+    char *abs_path = get_absolute_path(path);
+    char *home = getenv("HOME");
+    
+    if (home && strncmp(abs_path, home, strlen(home)) == 0 && abs_path[strlen(home)] == '/') {
+        // Replace home directory with ~
+        char *result = malloc(strlen(abs_path) + 2);
+        sprintf(result, "~%s", abs_path + strlen(home));
+        free(abs_path);
+        return result;
+    }
+    return abs_path;
+}
+
 void format_file_info(const char *path, const char *name, int is_dir, char *buf, int buf_size) {
     struct stat st;
     if (stat(path, &st) != 0) {
@@ -268,7 +293,44 @@ void draw_text(cairo_t *cr, const char *text, int x, int y, int width, PangoLayo
     pango_cairo_show_layout(cr, layout);
 }
 
-void draw_file_list(cairo_t *cr, FileList *list, int x, int y, int width, int height) {
+void draw_path_bar(cairo_t *cr, int x, int y, int width, FileList *list) {
+    cairo_set_source_rgb(cr, BG_R/255.0, BG_G/255.0, BG_B/255.0);
+    cairo_rectangle(cr, x, y, width, PATH_HEIGHT);
+    cairo_fill(cr);
+
+    // Draw a separator line at bottom of path bar
+    cairo_set_source_rgb(cr, 150/255.0, 150/255.0, 150/255.0);
+    cairo_set_line_width(cr, 1.0);
+    cairo_move_to(cr, x, y + PATH_HEIGHT);
+    cairo_line_to(cr, x + width, y + PATH_HEIGHT);
+    cairo_stroke(cr);
+
+    char full_path[4096];
+    if (list->count > 0 && list->selected >= 0 && list->selected < list->count) {
+        snprintf(full_path, sizeof(full_path), "%s/%s", list->path, list->entries[list->selected].name);
+    } else {
+        strncpy(full_path, list->path, sizeof(full_path) - 1);
+        full_path[sizeof(full_path) - 1] = '\0';
+    }
+    
+    char *display_path = get_display_path(full_path);
+
+    PangoLayout *layout = pango_cairo_create_layout(cr);
+    PangoFontDescription *desc = pango_font_description_from_string("Sans 11");
+    pango_layout_set_font_description(layout, desc);
+    pango_layout_set_ellipsize(layout, PANGO_ELLIPSIZE_MIDDLE);
+    cairo_set_source_rgb(cr, TEXT_R/255.0, TEXT_G/255.0, TEXT_B/255.0);
+    
+    cairo_move_to(cr, x + MARGIN, (PATH_HEIGHT / 2) - 5);
+    pango_layout_set_text(layout, display_path, -1);
+    pango_cairo_show_layout(cr, layout);
+
+    pango_font_description_free(desc);
+    g_object_unref(layout);
+    free(display_path);
+}
+
+void draw_file_entries(cairo_t *cr, FileList *list, int x, int y, int width, int height) {
     PangoLayout *layout = pango_cairo_create_layout(cr);
     PangoFontDescription *desc = pango_font_description_from_string("Sans 12");
     PangoFontDescription *bold_desc = pango_font_description_from_string("Sans Bold 12");
@@ -311,6 +373,14 @@ void draw_file_list(cairo_t *cr, FileList *list, int x, int y, int width, int he
     pango_font_description_free(desc);
     pango_font_description_free(bold_desc);
     g_object_unref(layout);
+}
+
+void draw_file_list(cairo_t *cr, FileList *list, int x, int y, int width, int height) {
+    // Draw path bar at the top
+    draw_path_bar(cr, x, y, width, list);
+    
+    // Draw file entries below
+    draw_file_entries(cr, list, x, y + PATH_HEIGHT, width, height - PATH_HEIGHT);
 }
 
 void draw_image(cairo_t *cr, int x, int y, int width, int height);
@@ -394,7 +464,7 @@ void draw_preview(cairo_t *cr, int x, int y, int width, int height) {
     }
 
     if (preview_is_dir && preview_list.count > 0) {
-        draw_file_list(cr, &preview_list, x, preview_y, width, preview_height);
+        draw_file_entries(cr, &preview_list, x, preview_y, width, preview_height);
         return;
     }
 
@@ -406,7 +476,7 @@ void draw_preview(cairo_t *cr, int x, int y, int width, int height) {
     
     if (file_list.count > 0 && file_list.selected >= 0 && file_list.selected < file_list.count) {
         if (file_list.entries[file_list.selected].is_dir) {
-            draw_file_list(cr, &preview_list, x, preview_y, width, preview_height);
+            draw_file_entries(cr, &preview_list, x, preview_y, width, preview_height);
         } else if (preview_is_image) {
             draw_image(cr, x, preview_y, width, preview_height);
         } else if (preview_is_html) {
