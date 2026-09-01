@@ -38,21 +38,23 @@ Window win;
 int screen;
 
 FileList file_list;
+FileList preview_list;
+int preview_is_dir;
 
-void init_file_list() {
-    file_list.entries = NULL;
-    file_list.count = 0;
-    file_list.capacity = 0;
-    file_list.selected = 0;
-    file_list.path = strdup(".");
+void init_file_list(FileList *list, const char *path) {
+    list->entries = NULL;
+    list->count = 0;
+    list->capacity = 0;
+    list->selected = 0;
+    list->path = strdup(path);
 }
 
-void free_file_list() {
-    for (int i = 0; i < file_list.count; i++) {
-        free(file_list.entries[i].name);
+void free_file_list(FileList *list) {
+    for (int i = 0; i < list->count; i++) {
+        free(list->entries[i].name);
     }
-    free(file_list.entries);
-    free(file_list.path);
+    free(list->entries);
+    free(list->path);
 }
 
 int compare_entries(const void *a, const void *b) {
@@ -65,23 +67,23 @@ int compare_entries(const void *a, const void *b) {
     return strcmp(ea->name, eb->name);
 }
 
-void load_directory(const char *path) {
+void load_directory(FileList *list, const char *path) {
     DIR *dir;
     struct dirent *ent;
     struct stat st;
 
     // Free old entries
-    for (int i = 0; i < file_list.count; i++) {
-        free(file_list.entries[i].name);
+    for (int i = 0; i < list->count; i++) {
+        free(list->entries[i].name);
     }
-    free(file_list.entries);
-    free(file_list.path);
+    free(list->entries);
+    free(list->path);
 
-    file_list.entries = NULL;
-    file_list.count = 0;
-    file_list.capacity = 0;
-    file_list.selected = 0;
-    file_list.path = strdup(path);
+    list->entries = NULL;
+    list->count = 0;
+    list->capacity = 0;
+    list->selected = 0;
+    list->path = strdup(path);
 
     if ((dir = opendir(path)) != NULL) {
         while ((ent = readdir(dir)) != NULL) {
@@ -93,19 +95,19 @@ void load_directory(const char *path) {
             snprintf(fullpath, sizeof(fullpath), "%s/%s", path, ent->d_name);
             
             if (stat(fullpath, &st) == 0) {
-                if (file_list.count >= file_list.capacity) {
-                    file_list.capacity = file_list.capacity == 0 ? 16 : file_list.capacity * 2;
-                    file_list.entries = realloc(file_list.entries, file_list.capacity * sizeof(FileEntry));
+                if (list->count >= list->capacity) {
+                    list->capacity = list->capacity == 0 ? 16 : list->capacity * 2;
+                    list->entries = realloc(list->entries, list->capacity * sizeof(FileEntry));
                 }
-                file_list.entries[file_list.count].name = strdup(ent->d_name);
-                file_list.entries[file_list.count].is_dir = S_ISDIR(st.st_mode);
-                file_list.count++;
+                list->entries[list->count].name = strdup(ent->d_name);
+                list->entries[list->count].is_dir = S_ISDIR(st.st_mode);
+                list->count++;
             }
         }
         closedir(dir);
     }
 
-    qsort(file_list.entries, file_list.count, sizeof(FileEntry), compare_entries);
+    qsort(list->entries, list->count, sizeof(FileEntry), compare_entries);
 }
 
 void draw_text(cairo_t *cr, const char *text, int x, int y, int width, PangoLayout *layout) {
@@ -116,7 +118,7 @@ void draw_text(cairo_t *cr, const char *text, int x, int y, int width, PangoLayo
     pango_cairo_show_layout(cr, layout);
 }
 
-void draw_file_list(cairo_t *cr, int x, int y, int width, int height) {
+void draw_file_list(cairo_t *cr, FileList *list, int x, int y, int width, int height) {
     PangoLayout *layout = pango_cairo_create_layout(cr);
     PangoFontDescription *desc = pango_font_description_from_string("Sans 12");
     pango_layout_set_font_description(layout, desc);
@@ -127,14 +129,14 @@ void draw_file_list(cairo_t *cr, int x, int y, int width, int height) {
 
     int scroll_offset = 0;
     int visible_items = height / LINE_HEIGHT;
-    if (file_list.selected >= visible_items) {
-        scroll_offset = file_list.selected - visible_items + 1;
+    if (list->selected >= visible_items) {
+        scroll_offset = list->selected - visible_items + 1;
     }
 
-    for (int i = scroll_offset; i < file_list.count && i < scroll_offset + visible_items; i++) {
+    for (int i = scroll_offset; i < list->count && i < scroll_offset + visible_items; i++) {
         int item_y = y + (i - scroll_offset) * LINE_HEIGHT + MARGIN;
 
-        if (i == file_list.selected) {
+        if (i == list->selected) {
             cairo_set_source_rgb(cr, 200/255.0, 200/255.0, 200/255.0);
             cairo_rectangle(cr, x, item_y - MARGIN/2, width, LINE_HEIGHT);
             cairo_fill(cr);
@@ -143,10 +145,10 @@ void draw_file_list(cairo_t *cr, int x, int y, int width, int height) {
         cairo_set_source_rgb(cr, TEXT_R/255.0, TEXT_G/255.0, TEXT_B/255.0);
         
         char display_name[256];
-        if (file_list.entries[i].is_dir) {
-            snprintf(display_name, sizeof(display_name), "%s/", file_list.entries[i].name);
+        if (list->entries[i].is_dir) {
+            snprintf(display_name, sizeof(display_name), "%s/", list->entries[i].name);
         } else {
-            strncpy(display_name, file_list.entries[i].name, sizeof(display_name) - 1);
+            strncpy(display_name, list->entries[i].name, sizeof(display_name) - 1);
             display_name[sizeof(display_name) - 1] = '\0';
         }
 
@@ -162,6 +164,11 @@ void draw_preview(cairo_t *cr, int x, int y, int width, int height) {
     cairo_rectangle(cr, x, y, width, height);
     cairo_fill(cr);
 
+    if (preview_is_dir && preview_list.count > 0) {
+        draw_file_list(cr, &preview_list, x, y, width, height);
+        return;
+    }
+
     PangoLayout *layout = pango_cairo_create_layout(cr);
     PangoFontDescription *desc = pango_font_description_from_string("Sans 12");
     pango_layout_set_font_description(layout, desc);
@@ -169,19 +176,34 @@ void draw_preview(cairo_t *cr, int x, int y, int width, int height) {
     cairo_set_source_rgb(cr, TEXT_R/255.0, TEXT_G/255.0, TEXT_B/255.0);
     
     if (file_list.count > 0 && file_list.selected >= 0 && file_list.selected < file_list.count) {
-        char preview_text[256];
         if (file_list.entries[file_list.selected].is_dir) {
-            snprintf(preview_text, sizeof(preview_text), "Directory: %s", file_list.entries[file_list.selected].name);
+            draw_file_list(cr, &preview_list, x, y, width, height);
         } else {
+            char preview_text[256];
             snprintf(preview_text, sizeof(preview_text), "File: %s", file_list.entries[file_list.selected].name);
+            draw_text(cr, preview_text, x + MARGIN, y + MARGIN + LINE_HEIGHT, width - 2 * MARGIN, layout);
         }
-        draw_text(cr, preview_text, x + MARGIN, y + MARGIN + LINE_HEIGHT, width - 2 * MARGIN, layout);
     } else {
         draw_text(cr, "No selection", x + MARGIN, y + MARGIN + LINE_HEIGHT, width - 2 * MARGIN, layout);
     }
 
     pango_font_description_free(desc);
     g_object_unref(layout);
+}
+
+void update_preview() {
+    if (file_list.count > 0 && file_list.selected >= 0 && file_list.selected < file_list.count) {
+        if (file_list.entries[file_list.selected].is_dir) {
+            char preview_path[4096];
+            snprintf(preview_path, sizeof(preview_path), "%s/%s", file_list.path, file_list.entries[file_list.selected].name);
+            load_directory(&preview_list, preview_path);
+            preview_is_dir = 1;
+        } else {
+            preview_is_dir = 0;
+        }
+    } else {
+        preview_is_dir = 0;
+    }
 }
 
 void draw_ui(int win_width, int win_height) {
@@ -191,7 +213,7 @@ void draw_ui(int win_width, int win_height) {
     cairo_surface_t *surface = cairo_xlib_surface_create(dpy, win, DefaultVisual(dpy, screen), win_width, win_height);
     cairo_t *cr = cairo_create(surface);
 
-    draw_file_list(cr, 0, 0, left_width, win_height);
+    draw_file_list(cr, &file_list, 0, 0, left_width, win_height);
     draw_preview(cr, left_width, 0, right_width, win_height);
 
     // Divider line
@@ -212,18 +234,21 @@ void handle_key(XKeyEvent *ev) {
         case XK_j:
             if (file_list.selected < file_list.count - 1) {
                 file_list.selected++;
+                update_preview();
             }
             break;
         case XK_k:
             if (file_list.selected > 0) {
                 file_list.selected--;
+                update_preview();
             }
             break;
         case XK_l:
             if (file_list.count > 0 && file_list.entries[file_list.selected].is_dir) {
                 char new_path[4096];
                 snprintf(new_path, sizeof(new_path), "%s/%s", file_list.path, file_list.entries[file_list.selected].name);
-                load_directory(new_path);
+                load_directory(&file_list, new_path);
+                update_preview();
             }
             break;
         case XK_h:
@@ -240,9 +265,11 @@ void handle_key(XKeyEvent *ev) {
                         strncpy(parent_path, file_list.path, len);
                         parent_path[len] = '\0';
                     }
-                    load_directory(parent_path);
+                    load_directory(&file_list, parent_path);
+                    update_preview();
                 } else {
-                    load_directory(".");
+                    load_directory(&file_list, ".");
+                    update_preview();
                 }
             }
             break;
@@ -269,11 +296,15 @@ int main() {
     XSelectInput(dpy, win, ExposureMask | KeyPressMask | StructureNotifyMask);
     XMapWindow(dpy, win);
 
-    init_file_list();
-    load_directory(".");
+    init_file_list(&file_list, ".");
+    load_directory(&file_list, ".");
+    init_file_list(&preview_list, ".");
+    preview_is_dir = 0;
 
     Atom wm_delete_window = XInternAtom(dpy, "WM_DELETE_WINDOW", False);
     XSetWMProtocols(dpy, win, &wm_delete_window, 1);
+
+    update_preview();
 
     int running = 1;
     while (running) {
@@ -311,7 +342,8 @@ int main() {
         }
     }
 
-    free_file_list();
+    free_file_list(&file_list);
+    free_file_list(&preview_list);
     XDestroyWindow(dpy, win);
     XCloseDisplay(dpy);
     return 0;
