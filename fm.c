@@ -5,6 +5,9 @@
 #include <strings.h>
 #include <dirent.h>
 #include <sys/stat.h>
+#include <sys/wait.h>
+#include <unistd.h>
+#include <fcntl.h>
 #include <time.h>
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>
@@ -46,6 +49,8 @@ FileList preview_list;
 int preview_is_dir;
 GdkPixbuf *preview_image;
 int preview_is_image;
+char *preview_html_text;
+int preview_is_html;
 
 void init_file_list(FileList *list, const char *path) {
     list->entries = NULL;
@@ -71,6 +76,14 @@ void free_preview_image() {
     preview_is_image = 0;
 }
 
+void free_preview_html() {
+    if (preview_html_text) {
+        free(preview_html_text);
+        preview_html_text = NULL;
+    }
+    preview_is_html = 0;
+}
+
 int is_image_file(const char *filename) {
     const char *ext = strrchr(filename, '.');
     if (!ext) return 0;
@@ -84,10 +97,73 @@ int is_image_file(const char *filename) {
            strcasecmp(ext, "webp") == 0;
 }
 
+int is_html_file(const char *filename) {
+    const char *ext = strrchr(filename, '.');
+    if (!ext) return 0;
+    ext++;
+    return strcasecmp(ext, "htm") == 0 ||
+           strcasecmp(ext, "html") == 0 ||
+           strcasecmp(ext, "xhtml") == 0;
+}
+
 int is_small_image(const char *path, off_t max_size) {
     struct stat st;
     if (stat(path, &st) != 0) return 0;
     return st.st_size <= max_size;
+}
+
+char *load_html_preview(const char *path) {
+    int pipefd[2];
+    if (pipe(pipefd) == -1) {
+        return NULL;
+    }
+
+    pid_t pid = fork();
+    if (pid == -1) {
+        close(pipefd[0]);
+        close(pipefd[1]);
+        return NULL;
+    }
+
+    if (pid == 0) {
+        // Child process
+        close(pipefd[0]);
+        dup2(pipefd[1], STDOUT_FILENO);
+        close(pipefd[1]);
+        execlp("lynx", "lynx", "-force_html", "-dump", path, (char *)NULL);
+        _exit(1);
+    }
+
+    // Parent process
+    close(pipefd[1]);
+
+    // Read output from lynx
+    char *buffer = NULL;
+    size_t buffer_size = 0;
+    size_t total = 0;
+    ssize_t n;
+
+    while (1) {
+        if (total + 1 >= buffer_size) {
+            buffer_size = buffer_size == 0 ? 4096 : buffer_size * 2;
+            buffer = realloc(buffer, buffer_size);
+        }
+        n = read(pipefd[0], buffer + total, buffer_size - total - 1);
+        if (n <= 0) break;
+        total += n;
+    }
+
+    close(pipefd[0]);
+
+    waitpid(pid, NULL, 0);
+
+    if (n < 0 || total == 0) {
+        free(buffer);
+        return NULL;
+    }
+
+    buffer[total] = '\0';
+    return buffer;
 }
 
 void format_file_info(const char *path, const char *name, int is_dir, char *buf, int buf_size) {
@@ -238,6 +314,7 @@ void draw_file_list(cairo_t *cr, FileList *list, int x, int y, int width, int he
 }
 
 void draw_image(cairo_t *cr, int x, int y, int width, int height);
+void draw_html_preview(cairo_t *cr, int x, int y, int width, int height);
 
 void draw_info_bar(cairo_t *cr, int x, int y, int width) {
     cairo_set_source_rgb(cr, BG_R/255.0, BG_G/255.0, BG_B/255.0);
@@ -269,6 +346,29 @@ void draw_info_bar(cairo_t *cr, int x, int y, int width) {
     g_object_unref(layout);
 }
 
+void draw_html_preview(cairo_t *cr, int x, int y, int width, int height) {
+    if (!preview_html_text) return;
+
+    cairo_set_source_rgb(cr, BG_R/255.0, BG_G/255.0, BG_B/255.0);
+    cairo_rectangle(cr, x, y, width, height);
+    cairo_fill(cr);
+
+    PangoLayout *layout = pango_cairo_create_layout(cr);
+    PangoFontDescription *desc = pango_font_description_from_string("Monospace 10");
+    pango_layout_set_font_description(layout, desc);
+    pango_layout_set_width(layout, (width - 2 * MARGIN) * PANGO_SCALE);
+    pango_layout_set_wrap(layout, PANGO_WRAP_WORD);
+
+    cairo_set_source_rgb(cr, TEXT_R/255.0, TEXT_G/255.0, TEXT_B/255.0);
+
+    cairo_move_to(cr, x + MARGIN, y + MARGIN);
+    pango_layout_set_text(layout, preview_html_text, -1);
+    pango_cairo_show_layout(cr, layout);
+
+    pango_font_description_free(desc);
+    g_object_unref(layout);
+}
+
 void draw_preview(cairo_t *cr, int x, int y, int width, int height) {
     // Draw info bar at the top
     draw_info_bar(cr, x, y, width);
@@ -288,6 +388,11 @@ void draw_preview(cairo_t *cr, int x, int y, int width, int height) {
         return;
     }
 
+    if (preview_is_html) {
+        draw_html_preview(cr, x, preview_y, width, preview_height);
+        return;
+    }
+
     if (preview_is_dir && preview_list.count > 0) {
         draw_file_list(cr, &preview_list, x, preview_y, width, preview_height);
         return;
@@ -304,6 +409,8 @@ void draw_preview(cairo_t *cr, int x, int y, int width, int height) {
             draw_file_list(cr, &preview_list, x, preview_y, width, preview_height);
         } else if (preview_is_image) {
             draw_image(cr, x, preview_y, width, preview_height);
+        } else if (preview_is_html) {
+            draw_html_preview(cr, x, preview_y, width, preview_height);
         } else {
             char preview_text[256];
             snprintf(preview_text, sizeof(preview_text), "File: %s", file_list.entries[file_list.selected].name);
@@ -390,6 +497,7 @@ void draw_image(cairo_t *cr, int x, int y, int width, int height) {
 
 void update_preview() {
     free_preview_image();
+    free_preview_html();
     preview_is_dir = 0;
 
     if (file_list.count > 0 && file_list.selected >= 0 && file_list.selected < file_list.count) {
@@ -412,6 +520,16 @@ void update_preview() {
                 if (preview_image) {
                     preview_is_image = 1;
                 }
+            }
+        } else if (is_html_file(file_list.entries[file_list.selected].name)) {
+            char html_path[4096];
+            snprintf(html_path, sizeof(html_path), "%s/%s", file_list.path, file_list.entries[file_list.selected].name);
+            preview_html_text = load_html_preview(html_path);
+            if (preview_html_text && preview_html_text[0] != '\0') {
+                preview_is_html = 1;
+            } else {
+                free(preview_html_text);
+                preview_html_text = NULL;
             }
         }
     }
@@ -555,6 +673,8 @@ int main() {
 
     free_file_list(&file_list);
     free_file_list(&preview_list);
+    free_preview_image();
+    free_preview_html();
     XDestroyWindow(dpy, win);
     XCloseDisplay(dpy);
     return 0;
