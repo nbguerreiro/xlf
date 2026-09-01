@@ -2,16 +2,19 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 #include <dirent.h>
 #include <sys/stat.h>
+#include <time.h>
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>
 #include <cairo-xlib.h>
 #include <pango/pangocairo.h>
+#include <gdk-pixbuf/gdk-pixbuf.h>
 
-#define SEPIA_R 240
-#define SEPIA_G 220
-#define SEPIA_B 190
+#define BG_R 223
+#define BG_G 191
+#define BG_B 191
 #define TEXT_R 0
 #define TEXT_G 0
 #define TEXT_B 0
@@ -19,6 +22,7 @@
 #define PANE_RATIO 0.4
 #define MARGIN 10
 #define LINE_HEIGHT 24
+#define INFO_HEIGHT 28
 
 typedef struct {
     char *name;
@@ -40,6 +44,8 @@ int screen;
 FileList file_list;
 FileList preview_list;
 int preview_is_dir;
+GdkPixbuf *preview_image;
+int preview_is_image;
 
 void init_file_list(FileList *list, const char *path) {
     list->entries = NULL;
@@ -55,6 +61,74 @@ void free_file_list(FileList *list) {
     }
     free(list->entries);
     free(list->path);
+}
+
+void free_preview_image() {
+    if (preview_image) {
+        g_object_unref(preview_image);
+        preview_image = NULL;
+    }
+    preview_is_image = 0;
+}
+
+int is_image_file(const char *filename) {
+    const char *ext = strrchr(filename, '.');
+    if (!ext) return 0;
+    ext++;
+    return strcasecmp(ext, "jpg") == 0 ||
+           strcasecmp(ext, "jpeg") == 0 ||
+           strcasecmp(ext, "png") == 0 ||
+           strcasecmp(ext, "gif") == 0 ||
+           strcasecmp(ext, "bmp") == 0 ||
+           strcasecmp(ext, "tiff") == 0 ||
+           strcasecmp(ext, "webp") == 0;
+}
+
+int is_small_image(const char *path, off_t max_size) {
+    struct stat st;
+    if (stat(path, &st) != 0) return 0;
+    return st.st_size <= max_size;
+}
+
+void format_file_info(const char *path, const char *name, int is_dir, char *buf, int buf_size) {
+    struct stat st;
+    if (stat(path, &st) != 0) {
+        snprintf(buf, buf_size, "? %s", name);
+        return;
+    }
+
+    // Format permissions
+    char perms[11];
+    perms[0] = (S_ISDIR(st.st_mode)) ? 'd' : '-';
+    perms[1] = (st.st_mode & S_IRUSR) ? 'r' : '-';
+    perms[2] = (st.st_mode & S_IWUSR) ? 'w' : '-';
+    perms[3] = (st.st_mode & S_IXUSR) ? 'x' : '-';
+    perms[4] = (st.st_mode & S_IRGRP) ? 'r' : '-';
+    perms[5] = (st.st_mode & S_IWGRP) ? 'w' : '-';
+    perms[6] = (st.st_mode & S_IXGRP) ? 'x' : '-';
+    perms[7] = (st.st_mode & S_IROTH) ? 'r' : '-';
+    perms[8] = (st.st_mode & S_IWOTH) ? 'w' : '-';
+    perms[9] = (st.st_mode & S_IXOTH) ? 'x' : '-';
+    perms[10] = '\0';
+
+    // Format size
+    char size_str[32];
+    if (is_dir) {
+        snprintf(size_str, sizeof(size_str), "%s", "-");
+    } else if (st.st_size < 1024) {
+        snprintf(size_str, sizeof(size_str), "%ldB", st.st_size);
+    } else if (st.st_size < 1024 * 1024) {
+        snprintf(size_str, sizeof(size_str), "%.1fK", st.st_size / 1024.0);
+    } else {
+        snprintf(size_str, sizeof(size_str), "%.1fM", st.st_size / (1024.0 * 1024.0));
+    }
+
+    // Format date
+    struct tm *tm = localtime(&st.st_mtime);
+    char date_str[64];
+    strftime(date_str, sizeof(date_str), "%a %b %d %H:%M:%S %Y", tm);
+
+    snprintf(buf, buf_size, "%s %ld %ld %s %s", perms, (long)st.st_uid, (long)st.st_gid, size_str, date_str);
 }
 
 int compare_entries(const void *a, const void *b) {
@@ -121,9 +195,10 @@ void draw_text(cairo_t *cr, const char *text, int x, int y, int width, PangoLayo
 void draw_file_list(cairo_t *cr, FileList *list, int x, int y, int width, int height) {
     PangoLayout *layout = pango_cairo_create_layout(cr);
     PangoFontDescription *desc = pango_font_description_from_string("Sans 12");
+    PangoFontDescription *bold_desc = pango_font_description_from_string("Sans Bold 12");
     pango_layout_set_font_description(layout, desc);
 
-    cairo_set_source_rgb(cr, SEPIA_R/255.0, SEPIA_G/255.0, SEPIA_B/255.0);
+    cairo_set_source_rgb(cr, BG_R/255.0, BG_G/255.0, BG_B/255.0);
     cairo_rectangle(cr, x, y, width, height);
     cairo_fill(cr);
 
@@ -147,12 +222,47 @@ void draw_file_list(cairo_t *cr, FileList *list, int x, int y, int width, int he
         char display_name[256];
         if (list->entries[i].is_dir) {
             snprintf(display_name, sizeof(display_name), "%s/", list->entries[i].name);
+            pango_layout_set_font_description(layout, bold_desc);
         } else {
             strncpy(display_name, list->entries[i].name, sizeof(display_name) - 1);
             display_name[sizeof(display_name) - 1] = '\0';
+            pango_layout_set_font_description(layout, desc);
         }
 
         draw_text(cr, display_name, x + MARGIN, item_y, width - 2 * MARGIN, layout);
+    }
+
+    pango_font_description_free(desc);
+    pango_font_description_free(bold_desc);
+    g_object_unref(layout);
+}
+
+void draw_image(cairo_t *cr, int x, int y, int width, int height);
+
+void draw_info_bar(cairo_t *cr, int x, int y, int width) {
+    cairo_set_source_rgb(cr, BG_R/255.0, BG_G/255.0, BG_B/255.0);
+    cairo_rectangle(cr, x, y, width, INFO_HEIGHT);
+    cairo_fill(cr);
+
+    // Draw a separator line at bottom of info bar
+    cairo_set_source_rgb(cr, 150/255.0, 150/255.0, 150/255.0);
+    cairo_set_line_width(cr, 1.0);
+    cairo_move_to(cr, x, y + INFO_HEIGHT);
+    cairo_line_to(cr, x + width, y + INFO_HEIGHT);
+    cairo_stroke(cr);
+
+    PangoLayout *layout = pango_cairo_create_layout(cr);
+    PangoFontDescription *desc = pango_font_description_from_string("Sans 10");
+    pango_layout_set_font_description(layout, desc);
+    cairo_set_source_rgb(cr, TEXT_R/255.0, TEXT_G/255.0, TEXT_B/255.0);
+
+    if (file_list.count > 0 && file_list.selected >= 0 && file_list.selected < file_list.count) {
+        char full_path[4096];
+        snprintf(full_path, sizeof(full_path), "%s/%s", file_list.path, file_list.entries[file_list.selected].name);
+        char info[256];
+        format_file_info(full_path, file_list.entries[file_list.selected].name, 
+                         file_list.entries[file_list.selected].is_dir, info, sizeof(info));
+        draw_text(cr, info, x + MARGIN, (INFO_HEIGHT / 2) - 5, width - 2 * MARGIN, layout);
     }
 
     pango_font_description_free(desc);
@@ -160,12 +270,26 @@ void draw_file_list(cairo_t *cr, FileList *list, int x, int y, int width, int he
 }
 
 void draw_preview(cairo_t *cr, int x, int y, int width, int height) {
-    cairo_set_source_rgb(cr, SEPIA_R/255.0, SEPIA_G/255.0, SEPIA_B/255.0);
-    cairo_rectangle(cr, x, y, width, height);
+    // Draw info bar at the top
+    draw_info_bar(cr, x, y, width);
+
+    // Draw the rest of the preview
+    int preview_y = y + INFO_HEIGHT;
+    int preview_height = height - INFO_HEIGHT;
+
+    if (preview_height <= 0) return;
+
+    cairo_set_source_rgb(cr, BG_R/255.0, BG_G/255.0, BG_B/255.0);
+    cairo_rectangle(cr, x, preview_y, width, preview_height);
     cairo_fill(cr);
 
+    if (preview_is_image) {
+        draw_image(cr, x, preview_y, width, preview_height);
+        return;
+    }
+
     if (preview_is_dir && preview_list.count > 0) {
-        draw_file_list(cr, &preview_list, x, y, width, height);
+        draw_file_list(cr, &preview_list, x, preview_y, width, preview_height);
         return;
     }
 
@@ -177,32 +301,119 @@ void draw_preview(cairo_t *cr, int x, int y, int width, int height) {
     
     if (file_list.count > 0 && file_list.selected >= 0 && file_list.selected < file_list.count) {
         if (file_list.entries[file_list.selected].is_dir) {
-            draw_file_list(cr, &preview_list, x, y, width, height);
+            draw_file_list(cr, &preview_list, x, preview_y, width, preview_height);
+        } else if (preview_is_image) {
+            draw_image(cr, x, preview_y, width, preview_height);
         } else {
             char preview_text[256];
             snprintf(preview_text, sizeof(preview_text), "File: %s", file_list.entries[file_list.selected].name);
-            draw_text(cr, preview_text, x + MARGIN, y + MARGIN + LINE_HEIGHT, width - 2 * MARGIN, layout);
+            draw_text(cr, preview_text, x + MARGIN, preview_y + MARGIN + LINE_HEIGHT, width - 2 * MARGIN, layout);
         }
     } else {
-        draw_text(cr, "No selection", x + MARGIN, y + MARGIN + LINE_HEIGHT, width - 2 * MARGIN, layout);
+        draw_text(cr, "No selection", x + MARGIN, preview_y + MARGIN + LINE_HEIGHT, width - 2 * MARGIN, layout);
     }
 
     pango_font_description_free(desc);
     g_object_unref(layout);
 }
 
+void draw_image(cairo_t *cr, int x, int y, int width, int height) {
+    if (!preview_image) return;
+
+    int img_width = gdk_pixbuf_get_width(preview_image);
+    int img_height = gdk_pixbuf_get_height(preview_image);
+
+    // Calculate scaled dimensions maintaining aspect ratio
+    double scale = 1.0;
+    if (img_width > width) {
+        scale = (double)width / img_width;
+    }
+    if (img_height * scale > height) {
+        scale = (double)height / img_height;
+    }
+
+    int draw_width = (int)(img_width * scale);
+    int draw_height = (int)(img_height * scale);
+    int draw_x = x + (width - draw_width) / 2;
+    int draw_y = y + (height - draw_height) / 2;
+
+    // Scale the pixbuf to fit
+    GdkPixbuf *scaled = gdk_pixbuf_scale_simple(preview_image, draw_width, draw_height, GDK_INTERP_BILINEAR);
+    
+    int s_width = gdk_pixbuf_get_width(scaled);
+    int s_height = gdk_pixbuf_get_height(scaled);
+    int s_n_channels = gdk_pixbuf_get_n_channels(scaled);
+    
+    // Ensure we have alpha channel
+    if (s_n_channels != 4) {
+        GdkPixbuf *with_alpha = gdk_pixbuf_add_alpha(scaled, FALSE, 0, 0, 0);
+        g_object_unref(scaled);
+        scaled = with_alpha;
+        s_n_channels = 4;
+    }
+    
+    // Get pixbuf data
+    guchar *pixels = gdk_pixbuf_get_pixels(scaled);
+    int rowstride = gdk_pixbuf_get_rowstride(scaled);
+    
+    // Create cairo surface from pixbuf data
+    // GDK pixbuf format: RGB(A) non-premultiplied, 8 bits per channel
+    // cairo ARGB32: ARGB premultiplied alpha, native endian
+    // We need to convert RGB(A) non-premultiplied to ARGB premultiplied
+    guchar *image_data = g_malloc0(s_height * s_width * 4);
+    for (int py = 0; py < s_height; py++) {
+        guchar *src = pixels + py * rowstride;
+        guint32 *dst = (guint32*)(image_data + py * s_width * 4);
+        for (int px = 0; px < s_width; px++) {
+            double a = src[3] / 255.0;
+            // Premultiply RGB by alpha
+            guint8 r = (guint8)(src[0] * a);
+            guint8 g = (guint8)(src[1] * a);
+            guint8 b = (guint8)(src[2] * a);
+            guint8 alpha = (guint8)(a * 255);
+            // Store as 0xAARRGGBB (little-endian: B,G,R,A)
+            // But cairo ARGB32 expects native endian, so on little-endian: B,G,R,A
+            dst[px] = (alpha << 24) | (r << 16) | (g << 8) | b;
+            src += 4;
+        }
+    }
+    
+    cairo_surface_t *image_surface = cairo_image_surface_create_for_data(
+        image_data, CAIRO_FORMAT_ARGB32, s_width, s_height, s_width * 4
+    );
+    cairo_set_source_surface(cr, image_surface, draw_x, draw_y);
+    cairo_paint(cr);
+    cairo_surface_destroy(image_surface);
+    g_free(image_data);
+    g_object_unref(scaled);
+}
+
 void update_preview() {
+    free_preview_image();
+    preview_is_dir = 0;
+
     if (file_list.count > 0 && file_list.selected >= 0 && file_list.selected < file_list.count) {
         if (file_list.entries[file_list.selected].is_dir) {
             char preview_path[4096];
             snprintf(preview_path, sizeof(preview_path), "%s/%s", file_list.path, file_list.entries[file_list.selected].name);
             load_directory(&preview_list, preview_path);
             preview_is_dir = 1;
-        } else {
-            preview_is_dir = 0;
+        } else if (is_image_file(file_list.entries[file_list.selected].name)) {
+            char image_path[4096];
+            snprintf(image_path, sizeof(image_path), "%s/%s", file_list.path, file_list.entries[file_list.selected].name);
+            // Only preview images smaller than ~1MB (1048576 bytes)
+            if (is_small_image(image_path, 1048576)) {
+                GError *error = NULL;
+                preview_image = gdk_pixbuf_new_from_file(image_path, &error);
+                if (error) {
+                    g_error_free(error);
+                    preview_image = NULL;
+                }
+                if (preview_image) {
+                    preview_is_image = 1;
+                }
+            }
         }
-    } else {
-        preview_is_dir = 0;
     }
 }
 
