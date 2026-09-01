@@ -894,26 +894,28 @@ void handle_key(XKeyEvent *ev) {
             }
             break;
         case XK_h:
-            if (strcmp(file_list.path, ".") != 0) {
-                // Go to parent directory
+            // Go to parent directory
+            if (strcmp(file_list.path, ".") == 0) {
+                // Current directory is ".", go to ".."
+                load_directory(&file_list, "..");
+            } else if (strcmp(file_list.path, "/") == 0) {
+                // Already at root, do nothing
+                ;
+            } else {
                 char *last_slash = strrchr(file_list.path, '/');
-                if (last_slash) {
-                    char parent_path[4096];
-                    if (last_slash == file_list.path) {
-                        // Root directory
-                        snprintf(parent_path, sizeof(parent_path), "/");
-                    } else {
-                        int len = last_slash - file_list.path;
-                        strncpy(parent_path, file_list.path, len);
-                        parent_path[len] = '\0';
-                    }
-                    load_directory(&file_list, parent_path);
-                    update_preview();
+                char parent_path[4096];
+                if (last_slash && last_slash > file_list.path) {
+                    // Remove everything after last slash
+                    int len = last_slash - file_list.path;
+                    strncpy(parent_path, file_list.path, len);
+                    parent_path[len] = '\0';
                 } else {
-                    load_directory(&file_list, ".");
-                    update_preview();
+                    // Path doesn't contain slash (shouldn't happen if not "." or "/")
+                    snprintf(parent_path, sizeof(parent_path), ".");
                 }
+                load_directory(&file_list, parent_path);
             }
+            update_preview();
             break;
         case XK_q:
         case XK_Escape:
