@@ -54,6 +54,8 @@ GdkPixbuf *preview_image;
 int preview_is_image;
 char *preview_html_text;
 int preview_is_html;
+char *preview_pdf_text;
+int preview_is_pdf;
 char *preview_media_text;
 int preview_is_media;
 
@@ -89,6 +91,14 @@ void free_preview_html() {
     preview_is_html = 0;
 }
 
+void free_preview_pdf() {
+    if (preview_pdf_text) {
+        free(preview_pdf_text);
+        preview_pdf_text = NULL;
+    }
+    preview_is_pdf = 0;
+}
+
 void free_preview_media() {
     if (preview_media_text) {
         free(preview_media_text);
@@ -106,8 +116,14 @@ int is_image_file(const char *filename) {
            strcasecmp(ext, "png") == 0 ||
            strcasecmp(ext, "gif") == 0 ||
            strcasecmp(ext, "bmp") == 0 ||
-           strcasecmp(ext, "tiff") == 0 ||
-           strcasecmp(ext, "webp") == 0;
+           strcasecmp(ext, "tiff") == 0;
+}
+
+int is_pdf_file(const char *filename) {
+    const char *ext = strrchr(filename, '.');
+    if (!ext) return 0;
+    ext++;
+    return strcasecmp(ext, "pdf") == 0;
 }
 
 int is_html_file(const char *filename) {
@@ -172,7 +188,13 @@ char *load_text_preview(const char *cmd, const char *arg1, const char *arg2, con
         close(pipefd[0]);
         dup2(pipefd[1], STDOUT_FILENO);
         close(pipefd[1]);
-        execlp(cmd, cmd, arg1, arg2, path, (char *)NULL);
+        if (arg1[0] && arg2[0]) {
+            execlp(cmd, cmd, arg1, arg2, path, (char *)NULL);
+        } else if (arg1[0]) {
+            execlp(cmd, cmd, arg1, path, (char *)NULL);
+        } else {
+            execlp(cmd, cmd, path, (char *)NULL);
+        }
         _exit(1);
     }
 
@@ -210,6 +232,10 @@ char *load_text_preview(const char *cmd, const char *arg1, const char *arg2, con
 
 char *load_html_preview(const char *path) {
     return load_text_preview("lynx", "-force_html", "-dump", path);
+}
+
+char *load_pdf_preview(const char *path) {
+    return load_text_preview("pdfinfo", "", "", path);
 }
 
 char *load_media_preview(const char *path) {
@@ -490,6 +516,10 @@ void draw_html_preview(cairo_t *cr, int x, int y, int width, int height) {
     draw_text_preview(cr, x, y, width, height, preview_html_text);
 }
 
+void draw_pdf_preview(cairo_t *cr, int x, int y, int width, int height) {
+    draw_text_preview(cr, x, y, width, height, preview_pdf_text);
+}
+
 void draw_media_preview(cairo_t *cr, int x, int y, int width, int height) {
     draw_text_preview(cr, x, y, width, height, preview_media_text);
 }
@@ -510,6 +540,11 @@ void draw_preview(cairo_t *cr, int x, int y, int width, int height) {
 
     if (preview_is_image) {
         draw_image(cr, x, preview_y, width, preview_height);
+        return;
+    }
+
+    if (preview_is_pdf) {
+        draw_pdf_preview(cr, x, preview_y, width, preview_height);
         return;
     }
 
@@ -539,6 +574,8 @@ void draw_preview(cairo_t *cr, int x, int y, int width, int height) {
             draw_file_entries(cr, &preview_list, x, preview_y, width, preview_height);
         } else if (preview_is_image) {
             draw_image(cr, x, preview_y, width, preview_height);
+        } else if (preview_is_pdf) {
+            draw_pdf_preview(cr, x, preview_y, width, preview_height);
         } else if (preview_is_html) {
             draw_html_preview(cr, x, preview_y, width, preview_height);
         } else if (preview_is_media) {
@@ -630,6 +667,7 @@ void draw_image(cairo_t *cr, int x, int y, int width, int height) {
 void update_preview() {
     free_preview_image();
     free_preview_html();
+    free_preview_pdf();
     free_preview_media();
     preview_is_dir = 0;
     
@@ -674,6 +712,19 @@ void update_preview() {
             } else {
                 free(preview_media_text);
                 preview_media_text = NULL;
+            }
+        } else if (is_pdf_file(file_list.entries[file_list.selected].name)) {
+            char pdf_path[4096];
+            snprintf(pdf_path, sizeof(pdf_path), "%s/%s", file_list.path, file_list.entries[file_list.selected].name);
+            // Only preview PDF files smaller than ~5MB
+            if (is_small_image(pdf_path, 5 * 1048576)) {
+                preview_pdf_text = load_pdf_preview(pdf_path);
+                if (preview_pdf_text && preview_pdf_text[0] != '\0') {
+                    preview_is_pdf = 1;
+                } else {
+                    free(preview_pdf_text);
+                    preview_pdf_text = NULL;
+                }
             }
         } else if (is_html_file(file_list.entries[file_list.selected].name)) {
             char html_path[4096];
@@ -839,6 +890,7 @@ int main() {
     free_file_list(&preview_list);
     free_preview_image();
     free_preview_html();
+    free_preview_pdf();
     free_preview_media();
     XDestroyWindow(dpy, win);
     XCloseDisplay(dpy);
