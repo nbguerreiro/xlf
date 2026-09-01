@@ -54,6 +54,8 @@ GdkPixbuf *preview_image;
 int preview_is_image;
 char *preview_html_text;
 int preview_is_html;
+char *preview_media_text;
+int preview_is_media;
 
 void init_file_list(FileList *list, const char *path) {
     list->entries = NULL;
@@ -87,6 +89,14 @@ void free_preview_html() {
     preview_is_html = 0;
 }
 
+void free_preview_media() {
+    if (preview_media_text) {
+        free(preview_media_text);
+        preview_media_text = NULL;
+    }
+    preview_is_media = 0;
+}
+
 int is_image_file(const char *filename) {
     const char *ext = strrchr(filename, '.');
     if (!ext) return 0;
@@ -109,13 +119,42 @@ int is_html_file(const char *filename) {
            strcasecmp(ext, "xhtml") == 0;
 }
 
+int is_mp3_file(const char *filename) {
+    const char *ext = strrchr(filename, '.');
+    if (!ext) return 0;
+    ext++;
+    return strcasecmp(ext, "mp3") == 0;
+}
+
+int is_media_file(const char *filename) {
+    const char *ext = strrchr(filename, '.');
+    if (!ext) return 0;
+    ext++;
+    return strcasecmp(ext, "aac") == 0 ||
+           strcasecmp(ext, "flac") == 0 ||
+           strcasecmp(ext, "wav") == 0 ||
+           strcasecmp(ext, "aif") == 0 ||
+           strcasecmp(ext, "aiff") == 0 ||
+           strcasecmp(ext, "avi") == 0 ||
+           strcasecmp(ext, "mp4") == 0 ||
+           strcasecmp(ext, "m4a") == 0 ||
+           strcasecmp(ext, "m4b") == 0 ||
+           strcasecmp(ext, "m4v") == 0 ||
+           strcasecmp(ext, "mkv") == 0 ||
+           strcasecmp(ext, "ogg") == 0 ||
+           strcasecmp(ext, "opus") == 0 ||
+           strcasecmp(ext, "ape") == 0 ||
+           strcasecmp(ext, "webm") == 0 ||
+           strcasecmp(ext, "mp3") == 0;
+}
+
 int is_small_image(const char *path, off_t max_size) {
     struct stat st;
     if (stat(path, &st) != 0) return 0;
     return st.st_size <= max_size;
 }
 
-char *load_html_preview(const char *path) {
+char *load_text_preview(const char *cmd, const char *arg1, const char *arg2, const char *path) {
     int pipefd[2];
     if (pipe(pipefd) == -1) {
         return NULL;
@@ -133,14 +172,14 @@ char *load_html_preview(const char *path) {
         close(pipefd[0]);
         dup2(pipefd[1], STDOUT_FILENO);
         close(pipefd[1]);
-        execlp("lynx", "lynx", "-force_html", "-dump", path, (char *)NULL);
+        execlp(cmd, cmd, arg1, arg2, path, (char *)NULL);
         _exit(1);
     }
 
     // Parent process
     close(pipefd[1]);
 
-    // Read output from lynx
+    // Read output
     char *buffer = NULL;
     size_t buffer_size = 0;
     size_t total = 0;
@@ -167,6 +206,14 @@ char *load_html_preview(const char *path) {
 
     buffer[total] = '\0';
     return buffer;
+}
+
+char *load_html_preview(const char *path) {
+    return load_text_preview("lynx", "-force_html", "-dump", path);
+}
+
+char *load_media_preview(const char *path) {
+    return load_text_preview("mediainfo", "", "", path);
 }
 
 char *get_absolute_path(const char *path) {
@@ -416,8 +463,8 @@ void draw_info_bar(cairo_t *cr, int x, int y, int width) {
     g_object_unref(layout);
 }
 
-void draw_html_preview(cairo_t *cr, int x, int y, int width, int height) {
-    if (!preview_html_text) return;
+void draw_text_preview(cairo_t *cr, int x, int y, int width, int height, const char *text) {
+    if (!text) return;
 
     cairo_set_source_rgb(cr, BG_R/255.0, BG_G/255.0, BG_B/255.0);
     cairo_rectangle(cr, x, y, width, height);
@@ -432,11 +479,19 @@ void draw_html_preview(cairo_t *cr, int x, int y, int width, int height) {
     cairo_set_source_rgb(cr, TEXT_R/255.0, TEXT_G/255.0, TEXT_B/255.0);
 
     cairo_move_to(cr, x + MARGIN, y + MARGIN);
-    pango_layout_set_text(layout, preview_html_text, -1);
+    pango_layout_set_text(layout, text, -1);
     pango_cairo_show_layout(cr, layout);
 
     pango_font_description_free(desc);
     g_object_unref(layout);
+}
+
+void draw_html_preview(cairo_t *cr, int x, int y, int width, int height) {
+    draw_text_preview(cr, x, y, width, height, preview_html_text);
+}
+
+void draw_media_preview(cairo_t *cr, int x, int y, int width, int height) {
+    draw_text_preview(cr, x, y, width, height, preview_media_text);
 }
 
 void draw_preview(cairo_t *cr, int x, int y, int width, int height) {
@@ -463,6 +518,11 @@ void draw_preview(cairo_t *cr, int x, int y, int width, int height) {
         return;
     }
 
+    if (preview_is_media) {
+        draw_media_preview(cr, x, preview_y, width, preview_height);
+        return;
+    }
+
     if (preview_is_dir && preview_list.count > 0) {
         draw_file_entries(cr, &preview_list, x, preview_y, width, preview_height);
         return;
@@ -481,6 +541,8 @@ void draw_preview(cairo_t *cr, int x, int y, int width, int height) {
             draw_image(cr, x, preview_y, width, preview_height);
         } else if (preview_is_html) {
             draw_html_preview(cr, x, preview_y, width, preview_height);
+        } else if (preview_is_media) {
+            draw_media_preview(cr, x, preview_y, width, preview_height);
         } else {
             char preview_text[256];
             snprintf(preview_text, sizeof(preview_text), "File: %s", file_list.entries[file_list.selected].name);
@@ -568,7 +630,19 @@ void draw_image(cairo_t *cr, int x, int y, int width, int height) {
 void update_preview() {
     free_preview_image();
     free_preview_html();
+    free_preview_media();
     preview_is_dir = 0;
+    
+    // Clear preview_list if the selected item is not a directory
+    if (file_list.count > 0 && file_list.selected >= 0 && file_list.selected < file_list.count) {
+        if (!file_list.entries[file_list.selected].is_dir) {
+            free_file_list(&preview_list);
+            init_file_list(&preview_list, ".");
+        }
+    } else {
+        free_file_list(&preview_list);
+        init_file_list(&preview_list, ".");
+    }
 
     if (file_list.count > 0 && file_list.selected >= 0 && file_list.selected < file_list.count) {
         if (file_list.entries[file_list.selected].is_dir) {
@@ -591,6 +665,16 @@ void update_preview() {
                     preview_is_image = 1;
                 }
             }
+        } else if (is_mp3_file(file_list.entries[file_list.selected].name)) {
+            char media_path[4096];
+            snprintf(media_path, sizeof(media_path), "%s/%s", file_list.path, file_list.entries[file_list.selected].name);
+            preview_media_text = load_text_preview("mp3info", "-x", "", media_path);
+            if (preview_media_text && preview_media_text[0] != '\0') {
+                preview_is_media = 1;
+            } else {
+                free(preview_media_text);
+                preview_media_text = NULL;
+            }
         } else if (is_html_file(file_list.entries[file_list.selected].name)) {
             char html_path[4096];
             snprintf(html_path, sizeof(html_path), "%s/%s", file_list.path, file_list.entries[file_list.selected].name);
@@ -600,6 +684,16 @@ void update_preview() {
             } else {
                 free(preview_html_text);
                 preview_html_text = NULL;
+            }
+        } else if (is_media_file(file_list.entries[file_list.selected].name)) {
+            char media_path[4096];
+            snprintf(media_path, sizeof(media_path), "%s/%s", file_list.path, file_list.entries[file_list.selected].name);
+            preview_media_text = load_media_preview(media_path);
+            if (preview_media_text && preview_media_text[0] != '\0') {
+                preview_is_media = 1;
+            } else {
+                free(preview_media_text);
+                preview_media_text = NULL;
             }
         }
     }
@@ -745,6 +839,7 @@ int main() {
     free_file_list(&preview_list);
     free_preview_image();
     free_preview_html();
+    free_preview_media();
     XDestroyWindow(dpy, win);
     XCloseDisplay(dpy);
     return 0;
