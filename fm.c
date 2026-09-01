@@ -874,14 +874,14 @@ void handle_key(XKeyEvent *ev) {
 
     switch (ks) {
         case XK_j:
-            if (file_list.selected < file_list.count - 1) {
-                file_list.selected++;
+            if (file_list.count > 0) {
+                file_list.selected = (file_list.selected + 1) % file_list.count;
                 update_preview();
             }
             break;
         case XK_k:
-            if (file_list.selected > 0) {
-                file_list.selected--;
+            if (file_list.count > 0) {
+                file_list.selected = (file_list.selected - 1 + file_list.count) % file_list.count;
                 update_preview();
             }
             break;
