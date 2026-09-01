@@ -58,6 +58,8 @@ char *preview_pdf_text;
 int preview_is_pdf;
 char *preview_media_text;
 int preview_is_media;
+char *preview_text_content;
+int preview_is_text;
 
 void init_file_list(FileList *list, const char *path) {
     list->entries = NULL;
@@ -99,6 +101,14 @@ void free_preview_pdf() {
     preview_is_pdf = 0;
 }
 
+void free_preview_text() {
+    if (preview_text_content) {
+        free(preview_text_content);
+        preview_text_content = NULL;
+    }
+    preview_is_text = 0;
+}
+
 void free_preview_media() {
     if (preview_media_text) {
         free(preview_media_text);
@@ -124,6 +134,38 @@ int is_pdf_file(const char *filename) {
     if (!ext) return 0;
     ext++;
     return strcasecmp(ext, "pdf") == 0;
+}
+
+int is_text_file(const char *filename) {
+    const char *ext = strrchr(filename, '.');
+    if (!ext) return 0;
+    ext++;
+    return strcasecmp(ext, "txt") == 0 ||
+           strcasecmp(ext, "md") == 0 ||
+           strcasecmp(ext, "csv") == 0 ||
+           strcasecmp(ext, "log") == 0 ||
+           strcasecmp(ext, "conf") == 0 ||
+           strcasecmp(ext, "config") == 0 ||
+           strcasecmp(ext, "json") == 0 ||
+           strcasecmp(ext, "xml") == 0 ||
+           strcasecmp(ext, "yml") == 0 ||
+           strcasecmp(ext, "yaml") == 0 ||
+           strcasecmp(ext, "sh") == 0 ||
+           strcasecmp(ext, "py") == 0 ||
+           strcasecmp(ext, "c") == 0 ||
+           strcasecmp(ext, "h") == 0 ||
+           strcasecmp(ext, "cpp") == 0 ||
+           strcasecmp(ext, "cc") == 0 ||
+           strcasecmp(ext, "hs") == 0 ||
+           strcasecmp(ext, "rs") == 0 ||
+           strcasecmp(ext, "js") == 0 ||
+           strcasecmp(ext, "ts") == 0 ||
+           strcasecmp(ext, "go") == 0 ||
+           strcasecmp(ext, "rb") == 0 ||
+           strcasecmp(ext, "php") == 0 ||
+           strcasecmp(ext, "java") == 0 ||
+           strcasecmp(ext, "lua") == 0 ||
+           strcasecmp(ext, "sql") == 0;
 }
 
 int is_html_file(const char *filename) {
@@ -232,6 +274,37 @@ char *load_text_preview(const char *cmd, const char *arg1, const char *arg2, con
 
 char *load_html_preview(const char *path) {
     return load_text_preview("lynx", "-force_html", "-dump", path);
+}
+
+char *load_text_content(const char *path, off_t max_size) {
+    FILE *f = fopen(path, "r");
+    if (!f) return NULL;
+
+    fseek(f, 0, SEEK_END);
+    long fsize = ftell(f);
+    fseek(f, 0, SEEK_SET);
+
+    if (fsize <= 0 || fsize > max_size) {
+        fclose(f);
+        return NULL;
+    }
+
+    char *buffer = malloc(fsize + 1);
+    if (!buffer) {
+        fclose(f);
+        return NULL;
+    }
+
+    size_t n = fread(buffer, 1, fsize, f);
+    fclose(f);
+
+    if (n <= 0) {
+        free(buffer);
+        return NULL;
+    }
+
+    buffer[n] = '\0';
+    return buffer;
 }
 
 char *load_pdf_preview(const char *path) {
@@ -520,6 +593,10 @@ void draw_pdf_preview(cairo_t *cr, int x, int y, int width, int height) {
     draw_text_preview(cr, x, y, width, height, preview_pdf_text);
 }
 
+void draw_text_content_preview(cairo_t *cr, int x, int y, int width, int height) {
+    draw_text_preview(cr, x, y, width, height, preview_text_content);
+}
+
 void draw_media_preview(cairo_t *cr, int x, int y, int width, int height) {
     draw_text_preview(cr, x, y, width, height, preview_media_text);
 }
@@ -545,6 +622,11 @@ void draw_preview(cairo_t *cr, int x, int y, int width, int height) {
 
     if (preview_is_pdf) {
         draw_pdf_preview(cr, x, preview_y, width, preview_height);
+        return;
+    }
+
+    if (preview_is_text) {
+        draw_text_content_preview(cr, x, preview_y, width, preview_height);
         return;
     }
 
@@ -576,6 +658,8 @@ void draw_preview(cairo_t *cr, int x, int y, int width, int height) {
             draw_image(cr, x, preview_y, width, preview_height);
         } else if (preview_is_pdf) {
             draw_pdf_preview(cr, x, preview_y, width, preview_height);
+        } else if (preview_is_text) {
+            draw_text_content_preview(cr, x, preview_y, width, preview_height);
         } else if (preview_is_html) {
             draw_html_preview(cr, x, preview_y, width, preview_height);
         } else if (preview_is_media) {
@@ -668,6 +752,7 @@ void update_preview() {
     free_preview_image();
     free_preview_html();
     free_preview_pdf();
+    free_preview_text();
     free_preview_media();
     preview_is_dir = 0;
     
@@ -701,6 +786,19 @@ void update_preview() {
                 }
                 if (preview_image) {
                     preview_is_image = 1;
+                }
+            }
+        } else if (is_text_file(file_list.entries[file_list.selected].name)) {
+            char text_path[4096];
+            snprintf(text_path, sizeof(text_path), "%s/%s", file_list.path, file_list.entries[file_list.selected].name);
+            // Only preview text files smaller than ~1MB
+            if (is_small_image(text_path, 1048576)) {
+                preview_text_content = load_text_content(text_path, 1048576);
+                if (preview_text_content && preview_text_content[0] != '\0') {
+                    preview_is_text = 1;
+                } else {
+                    free(preview_text_content);
+                    preview_text_content = NULL;
                 }
             }
         } else if (is_mp3_file(file_list.entries[file_list.selected].name)) {
@@ -891,6 +989,7 @@ int main() {
     free_preview_image();
     free_preview_html();
     free_preview_pdf();
+    free_preview_text();
     free_preview_media();
     XDestroyWindow(dpy, win);
     XCloseDisplay(dpy);
