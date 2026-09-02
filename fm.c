@@ -11,6 +11,7 @@
 #include <fcntl.h>
 #include <limits.h>
 #include <time.h>
+#include <errno.h>
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>
 #include <cairo-xlib.h>
@@ -70,6 +71,7 @@ void init_file_list(FileList *list, const char *path) {
 }
 
 void free_file_list(FileList *list) {
+    if (!list) return;
     for (int i = 0; i < list->count; i++) {
         free(list->entries[i].name);
     }
@@ -213,6 +215,8 @@ int is_small_image(const char *path, off_t max_size) {
 }
 
 char *load_text_preview(const char *cmd, const char *arg1, const char *arg2, const char *path) {
+    if (!cmd || !path) return NULL;
+
     int pipefd[2];
     if (pipe(pipefd) == -1) {
         return NULL;
@@ -228,16 +232,16 @@ char *load_text_preview(const char *cmd, const char *arg1, const char *arg2, con
     if (pid == 0) {
         // Child process
         close(pipefd[0]);
-        dup2(pipefd[1], STDOUT_FILENO);
+        if (dup2(pipefd[1], STDOUT_FILENO) == -1) _exit(127);
         close(pipefd[1]);
-        if (arg1[0] && arg2[0]) {
+        if (arg1 && arg2) {
             execlp(cmd, cmd, arg1, arg2, path, (char *)NULL);
-        } else if (arg1[0]) {
+        } else if (arg1) {
             execlp(cmd, cmd, arg1, path, (char *)NULL);
         } else {
             execlp(cmd, cmd, path, (char *)NULL);
         }
-        _exit(1);
+        _exit(127);
     }
 
     // Parent process
@@ -247,23 +251,40 @@ char *load_text_preview(const char *cmd, const char *arg1, const char *arg2, con
     char *buffer = NULL;
     size_t buffer_size = 0;
     size_t total = 0;
-    ssize_t n;
 
     while (1) {
         if (total + 1 >= buffer_size) {
-            buffer_size = buffer_size == 0 ? 4096 : buffer_size * 2;
-            buffer = realloc(buffer, buffer_size);
+            size_t new_size = buffer_size == 0 ? 4096 : buffer_size * 2;
+            char *tmp = realloc(buffer, new_size);
+            if (!tmp) {
+                free(buffer);
+                close(pipefd[0]);
+                waitpid(pid, NULL, 0);
+                return NULL;
+            }
+            buffer = tmp;
+            buffer_size = new_size;
         }
-        n = read(pipefd[0], buffer + total, buffer_size - total - 1);
-        if (n <= 0) break;
-        total += n;
+        ssize_t n = read(pipefd[0], buffer + total, buffer_size - total - 1);
+        if (n > 0) {
+            total += n;
+            continue;
+        }
+        if (n == 0) break;
+        if (n == -1) {
+            if (errno == EINTR) continue;
+            free(buffer);
+            close(pipefd[0]);
+            waitpid(pid, NULL, 0);
+            return NULL;
+        }
     }
 
     close(pipefd[0]);
 
     waitpid(pid, NULL, 0);
 
-    if (n < 0 || total == 0) {
+    if (total == 0) {
         free(buffer);
         return NULL;
     }
@@ -308,31 +329,41 @@ char *load_text_content(const char *path, off_t max_size) {
 }
 
 char *load_pdf_preview(const char *path) {
-    return load_text_preview("pdfinfo", "", "", path);
+    return load_text_preview("pdfinfo", NULL, NULL, path);
 }
 
 char *load_media_preview(const char *path) {
-    return load_text_preview("mediainfo", "", "", path);
+    return load_text_preview("mediainfo", NULL, NULL, path);
 }
 
 char *get_absolute_path(const char *path) {
     char buf[4096];
     if (realpath(path, buf)) {
-        return strdup(buf);
+        char *r = strdup(buf);
+        return r;
     }
     return strdup(path);
 }
 
 char *get_display_path(const char *path) {
     char *abs_path = get_absolute_path(path);
+    if (!abs_path) return NULL;
     char *home = getenv("HOME");
-    
-    if (home && strncmp(abs_path, home, strlen(home)) == 0 && abs_path[strlen(home)] == '/') {
-        // Replace home directory with ~
-        char *result = malloc(strlen(abs_path) + 2);
-        sprintf(result, "~%s", abs_path + strlen(home));
-        free(abs_path);
-        return result;
+    if (home) {
+        size_t hlen = strlen(home);
+        if (strncmp(abs_path, home, hlen) == 0 && (abs_path[hlen] == '/' || abs_path[hlen] == '\0')) {
+            size_t rest_len = strlen(abs_path) - hlen;
+            // Allocate for '~' + rest + null
+            char *result = malloc(rest_len + 2);
+            if (!result) { free(abs_path); return NULL; }
+            if (rest_len == 0) {
+                snprintf(result, rest_len + 2, "~");
+            } else {
+                snprintf(result, rest_len + 2, "~%s", abs_path + hlen);
+            }
+            free(abs_path);
+            return result;
+        }
     }
     return abs_path;
 }
@@ -405,6 +436,7 @@ void load_directory(FileList *list, const char *path) {
     list->capacity = 0;
     list->selected = 0;
     list->path = strdup(path);
+    if (!list->path) list->path = NULL;
 
     if ((dir = opendir(path)) != NULL) {
         while ((ent = readdir(dir)) != NULL) {
@@ -417,10 +449,18 @@ void load_directory(FileList *list, const char *path) {
             
             if (stat(fullpath, &st) == 0) {
                 if (list->count >= list->capacity) {
-                    list->capacity = list->capacity == 0 ? 16 : list->capacity * 2;
-                    list->entries = realloc(list->entries, list->capacity * sizeof(FileEntry));
+                    size_t newcap = list->capacity == 0 ? 16 : list->capacity * 2;
+                    FileEntry *tmp = realloc(list->entries, newcap * sizeof(FileEntry));
+                    if (!tmp) {
+                        // allocation failed: stop adding further entries
+                        break;
+                    }
+                    list->entries = tmp;
+                    list->capacity = newcap;
                 }
-                list->entries[list->count].name = strdup(ent->d_name);
+                char *name = strdup(ent->d_name);
+                if (!name) continue;
+                list->entries[list->count].name = name;
                 list->entries[list->count].is_dir = S_ISDIR(st.st_mode);
                 list->count++;
             }
@@ -428,7 +468,9 @@ void load_directory(FileList *list, const char *path) {
         closedir(dir);
     }
 
-    qsort(list->entries, list->count, sizeof(FileEntry), compare_entries);
+    if (list->entries && list->count > 0) {
+        qsort(list->entries, list->count, sizeof(FileEntry), compare_entries);
+    }
 }
 
 void draw_text(cairo_t *cr, const char *text, int x, int y, int width, PangoLayout *layout) {
@@ -455,7 +497,7 @@ void draw_path_bar(cairo_t *cr, int x, int y, int width, FileList *list) {
     if (list->count > 0 && list->selected >= 0 && list->selected < list->count) {
         snprintf(full_path, sizeof(full_path), "%s/%s", list->path, list->entries[list->selected].name);
     } else {
-        strncpy(full_path, list->path, sizeof(full_path) - 1);
+        strncpy(full_path, list->path ? list->path : ".", sizeof(full_path) - 1);
         full_path[sizeof(full_path) - 1] = '\0';
     }
     
@@ -468,7 +510,7 @@ void draw_path_bar(cairo_t *cr, int x, int y, int width, FileList *list) {
     cairo_set_source_rgb(cr, TEXT_R/255.0, TEXT_G/255.0, TEXT_B/255.0);
     
     cairo_move_to(cr, x + MARGIN, (PATH_HEIGHT / 2) - 5);
-    pango_layout_set_text(layout, display_path, -1);
+    pango_layout_set_text(layout, display_path ? display_path : "", -1);
     pango_cairo_show_layout(cr, layout);
 
     pango_font_description_free(desc);
@@ -804,7 +846,7 @@ void update_preview() {
         } else if (is_mp3_file(file_list.entries[file_list.selected].name)) {
             char media_path[4096];
             snprintf(media_path, sizeof(media_path), "%s/%s", file_list.path, file_list.entries[file_list.selected].name);
-            preview_media_text = load_text_preview("mp3info", "-x", "", media_path);
+            preview_media_text = load_text_preview("mp3info", "-x", NULL, media_path);
             if (preview_media_text && preview_media_text[0] != '\0') {
                 preview_is_media = 1;
             } else {
