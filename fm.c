@@ -44,6 +44,12 @@ typedef struct {
     char *path;
 } FileList;
 
+typedef struct {
+    GdkPixbuf *pixbuf;
+    int width;
+    int height;
+} ScaledImageCache;
+
 Display *dpy;
 Window win;
 int screen;
@@ -71,6 +77,9 @@ PangoFontDescription *desc_normal = NULL;
 PangoFontDescription *desc_bold = NULL;
 PangoFontDescription *desc_mono = NULL;
 PangoFontDescription *desc_small = NULL;
+
+// Cached scaled image (reused across resize/redraw cycles)
+ScaledImageCache scaled_image_cache = { NULL, 0, 0 };
 
 void init_file_list(FileList *list, const char *path) {
     list->entries = NULL;
@@ -127,6 +136,15 @@ void free_preview_media() {
         preview_media_text = NULL;
     }
     preview_is_media = 0;
+}
+
+void free_scaled_image_cache() {
+    if (scaled_image_cache.pixbuf) {
+        g_object_unref(scaled_image_cache.pixbuf);
+        scaled_image_cache.pixbuf = NULL;
+    }
+    scaled_image_cache.width = 0;
+    scaled_image_cache.height = 0;
 }
 
 void init_pango_objects(cairo_t *cr) {
@@ -798,7 +816,46 @@ void draw_image(cairo_t *cr, int x, int y, int width, int height) {
     int draw_x = x + (width - draw_width) / 2;
     int draw_y = y + (height - draw_height) / 2;
 
-    // Scale the pixbuf to fit
+    // Check if cached scaled image is valid (dimensions match)
+    if (scaled_image_cache.pixbuf && 
+        scaled_image_cache.width == draw_width && 
+        scaled_image_cache.height == draw_height) {
+        // Use cached scaled image
+        GdkPixbuf *scaled = scaled_image_cache.pixbuf;
+        
+        int s_width = gdk_pixbuf_get_width(scaled);
+        int s_height = gdk_pixbuf_get_height(scaled);
+        int s_n_channels = gdk_pixbuf_get_n_channels(scaled);
+        
+        guchar *pixels = gdk_pixbuf_get_pixels(scaled);
+        int rowstride = gdk_pixbuf_get_rowstride(scaled);
+        
+        guchar *image_data = g_malloc0(s_height * s_width * 4);
+        for (int py = 0; py < s_height; py++) {
+            guchar *src = pixels + py * rowstride;
+            guint32 *dst = (guint32*)(image_data + py * s_width * 4);
+            for (int px = 0; px < s_width; px++) {
+                double a = src[3] / 255.0;
+                guint8 r = (guint8)(src[0] * a);
+                guint8 g = (guint8)(src[1] * a);
+                guint8 b = (guint8)(src[2] * a);
+                guint8 alpha = (guint8)(a * 255);
+                dst[px] = (alpha << 24) | (r << 16) | (g << 8) | b;
+                src += 4;
+            }
+        }
+        
+        cairo_surface_t *image_surface = cairo_image_surface_create_for_data(
+            image_data, CAIRO_FORMAT_ARGB32, s_width, s_height, s_width * 4
+        );
+        cairo_set_source_surface(cr, image_surface, draw_x, draw_y);
+        cairo_paint(cr);
+        cairo_surface_destroy(image_surface);
+        g_free(image_data);
+        return;
+    }
+
+    // Scale the pixbuf and cache it
     GdkPixbuf *scaled = gdk_pixbuf_scale_simple(preview_image, draw_width, draw_height, GDK_INTERP_BILINEAR);
     
     int s_width = gdk_pixbuf_get_width(scaled);
@@ -813,27 +870,26 @@ void draw_image(cairo_t *cr, int x, int y, int width, int height) {
         s_n_channels = 4;
     }
     
-    // Get pixbuf data
+    // Update cache
+    free_scaled_image_cache();
+    scaled_image_cache.pixbuf = g_object_ref(scaled);
+    scaled_image_cache.width = s_width;
+    scaled_image_cache.height = s_height;
+    
+    // Get pixbuf data and render
     guchar *pixels = gdk_pixbuf_get_pixels(scaled);
     int rowstride = gdk_pixbuf_get_rowstride(scaled);
     
-    // Create cairo surface from pixbuf data
-    // GDK pixbuf format: RGB(A) non-premultiplied, 8 bits per channel
-    // cairo ARGB32: ARGB premultiplied alpha, native endian
-    // We need to convert RGB(A) non-premultiplied to ARGB premultiplied
     guchar *image_data = g_malloc0(s_height * s_width * 4);
     for (int py = 0; py < s_height; py++) {
         guchar *src = pixels + py * rowstride;
         guint32 *dst = (guint32*)(image_data + py * s_width * 4);
         for (int px = 0; px < s_width; px++) {
             double a = src[3] / 255.0;
-            // Premultiply RGB by alpha
             guint8 r = (guint8)(src[0] * a);
             guint8 g = (guint8)(src[1] * a);
             guint8 b = (guint8)(src[2] * a);
             guint8 alpha = (guint8)(a * 255);
-            // Store as 0xAARRGGBB (little-endian: B,G,R,A)
-            // But cairo ARGB32 expects native endian, so on little-endian: B,G,R,A
             dst[px] = (alpha << 24) | (r << 16) | (g << 8) | b;
             src += 4;
         }
@@ -855,6 +911,7 @@ void update_preview() {
     free_preview_pdf();
     free_preview_text();
     free_preview_media();
+    free_scaled_image_cache();
     preview_is_dir = 0;
     
     // Clear preview_list if the selected item is not a directory
@@ -1099,6 +1156,7 @@ int main() {
     free_preview_pdf();
     free_preview_text();
     free_preview_media();
+    free_scaled_image_cache();
     free_pango_objects();
     XDestroyWindow(dpy, win);
     XCloseDisplay(dpy);
