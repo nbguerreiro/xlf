@@ -81,6 +81,12 @@ PangoFontDescription *desc_small = NULL;
 // Cached scaled image (reused across resize/redraw cycles)
 ScaledImageCache scaled_image_cache = { NULL, 0, 0 };
 
+// Tool availability cache (checked once at startup)
+int tool_lynx_available = 0;
+int tool_pdfinfo_available = 0;
+int tool_mediainfo_available = 0;
+int tool_mp3info_available = 0;
+
 void init_file_list(FileList *list, const char *path) {
     list->entries = NULL;
     list->count = 0;
@@ -145,6 +151,38 @@ void free_scaled_image_cache() {
     }
     scaled_image_cache.width = 0;
     scaled_image_cache.height = 0;
+}
+
+// Check if a tool is available in PATH
+int tool_is_available(const char *tool_name) {
+    char *path_env = getenv("PATH");
+    if (!path_env) return 0;
+
+    char *path_copy = strdup(path_env);
+    if (!path_copy) return 0;
+
+    int found = 0;
+    char *token = strtok(path_copy, ":");
+    while (token) {
+        char tool_path[4096];
+        snprintf(tool_path, sizeof(tool_path), "%s/%s", token, tool_name);
+        if (access(tool_path, X_OK) == 0) {
+            found = 1;
+            break;
+        }
+        token = strtok(NULL, ":");
+    }
+
+    free(path_copy);
+    return found;
+}
+
+// Check all tools once at startup
+void check_tool_availability() {
+    tool_lynx_available = tool_is_available("lynx");
+    tool_pdfinfo_available = tool_is_available("pdfinfo");
+    tool_mediainfo_available = tool_is_available("mediainfo");
+    tool_mp3info_available = tool_is_available("mp3info");
 }
 
 void init_pango_objects(cairo_t *cr) {
@@ -398,6 +436,12 @@ char *load_text_preview(const char *cmd, const char *arg1, const char *arg2, con
 }
 
 char *load_html_preview(const char *path) {
+    if (!tool_lynx_available) {
+        return strdup("Tool 'lynx' not found.\nInstall lynx to preview HTML files.\n\n"
+                      "On Ubuntu/Debian: sudo apt install lynx\n"
+                      "On macOS: brew install lynx\n"
+                      "On Fedora: sudo dnf install lynx");
+    }
     return load_text_preview("lynx", "-force_html", "-dump", path);
 }
 
@@ -433,11 +477,33 @@ char *load_text_content(const char *path, off_t max_size) {
 }
 
 char *load_pdf_preview(const char *path) {
+    if (!tool_pdfinfo_available) {
+        return strdup("Tool 'pdfinfo' not found.\nInstall poppler-utils to preview PDF metadata.\n\n"
+                      "On Ubuntu/Debian: sudo apt install poppler-utils\n"
+                      "On macOS: brew install poppler\n"
+                      "On Fedora: sudo dnf install poppler-utils");
+    }
     return load_text_preview("pdfinfo", NULL, NULL, path);
 }
 
 char *load_media_preview(const char *path) {
+    if (!tool_mediainfo_available) {
+        return strdup("Tool 'mediainfo' not found.\nInstall mediainfo to preview audio/video metadata.\n\n"
+                      "On Ubuntu/Debian: sudo apt install mediainfo\n"
+                      "On macOS: brew install mediainfo\n"
+                      "On Fedora: sudo dnf install mediainfo");
+    }
     return load_text_preview("mediainfo", NULL, NULL, path);
+}
+
+char *load_mp3_info(const char *path) {
+    if (!tool_mp3info_available) {
+        return strdup("Tool 'mp3info' not found.\nInstall mp3info to preview MP3 metadata.\n\n"
+                      "On Ubuntu/Debian: sudo apt install mp3info\n"
+                      "On macOS: brew install mp3info\n"
+                      "On Fedora: sudo dnf install mp3info");
+    }
+    return load_text_preview("mp3info", "-x", NULL, path);
 }
 
 char *get_absolute_path(const char *path) {
@@ -987,7 +1053,7 @@ void update_preview() {
         } else if (is_mp3_file(file_list.entries[file_list.selected].name)) {
             char media_path[4096];
             snprintf(media_path, sizeof(media_path), "%s/%s", file_list.path, file_list.entries[file_list.selected].name);
-            preview_media_text = load_text_preview("mp3info", "-x", NULL, media_path);
+            preview_media_text = load_mp3_info(media_path);
             if (preview_media_text && preview_media_text[0] != '\0') {
                 preview_is_media = 1;
             } else {
@@ -1132,6 +1198,9 @@ int main() {
     load_directory(&file_list, ".");
     init_file_list(&preview_list, ".");
     preview_is_dir = 0;
+
+    // Check tool availability once at startup
+    check_tool_availability();
 
     Atom wm_delete_window = XInternAtom(dpy, "WM_DELETE_WINDOW", False);
     XSetWMProtocols(dpy, win, &wm_delete_window, 1);
