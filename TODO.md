@@ -10,7 +10,7 @@
 2) Memory / resource improvements (medium effort)
   - [x] Reuse PangoLayout and PangoFontDescription objects across draws instead of creating/destroying each frame. (effort: medium)
   - [x] Cache scaled thumbnails / scaled GdkPixbuf per file to avoid repeated scaling on resize/redraw. (effort: medium)
-  - [ ] Ensure cairo_image_surface lifetime rules are followed when using image data (keep data until surface destroyed). (effort: small)
+  - [x] Ensure cairo_image_surface lifetime rules are followed when using image data (keep data until surface destroyed). (effort: small)
 
 3) Performance / UI responsiveness (medium → large effort)
   - [ ] Make preview loading asynchronous so UI doesn't block (options: worker thread with mutex + main thread redraw; or non-blocking child processes integrated with event loop). (effort: large)
@@ -49,16 +49,16 @@
   - [ ] Minor key-handling improvements: use XLookupString/Xkb to handle modifiers and international layouts. (effort: small)
 
 Which item should I implement next?
-- Recommended: **2.3: Ensure cairo_image_surface lifetime rules are followed** (small effort, high correctness impact)
-  - Currently `image_data` is freed immediately after `cairo_surface_destroy()`, but cairo may still reference it
-  - Fix: either use `cairo_image_surface_create_for_data()` with a data copy that we own, or use `cairo_image_surface_create()` and copy
-  - This prevents potential crashes or memory safety issues during image rendering
+- Recommended: **4.2: Add graceful fallback for missing external tools** (small effort, high UX impact)
+  - When lynx, pdfinfo, mediainfo, or mp3info are missing, display a user-friendly message instead of silent failure
+  - Detect tool availability at startup or on-demand (check $PATH or test with execlp)
+  - Show message like "Tool 'lynx' not found. Install it to preview HTML files."
 
 What I just implemented:
-- **2.2: Cache scaled thumbnails** – reuse scaled GdkPixbuf across resize/redraw cycles to avoid redundant scaling
-  - Stores (pixbuf, width, height) in `ScaledImageCache`
-  - Checks cache validity in `draw_image()` before rescaling
-  - Clears cache when switching files or exiting
-  - Significant performance boost during window resizing with image selected
+- **2.3: Ensure cairo_image_surface lifetime rules** – replaced `cairo_image_surface_create_for_data()` with `cairo_image_surface_create()`
+  - Cairo now owns and manages surface memory
+  - Eliminates potential crashes from accessing freed memory after destroy
+  - Applies fix in both cached and fresh scaling paths in `draw_image()`
+  - Result: high correctness impact with minimal performance cost
 
-Ready to proceed with 2.3?
+Ready to proceed with 4.2?
