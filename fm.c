@@ -62,6 +62,15 @@ int preview_is_media;
 char *preview_text_content;
 int preview_is_text;
 
+// Cached Pango objects (reused across frames)
+PangoLayout *layout_normal = NULL;
+PangoLayout *layout_bold = NULL;
+PangoLayout *layout_mono = NULL;
+PangoFontDescription *desc_normal = NULL;
+PangoFontDescription *desc_bold = NULL;
+PangoFontDescription *desc_mono = NULL;
+PangoFontDescription *desc_small = NULL;
+
 void init_file_list(FileList *list, const char *path) {
     list->entries = NULL;
     list->count = 0;
@@ -117,6 +126,72 @@ void free_preview_media() {
         preview_media_text = NULL;
     }
     preview_is_media = 0;
+}
+
+void init_pango_objects(cairo_t *cr) {
+    if (!layout_normal) {
+        layout_normal = pango_cairo_create_layout(cr);
+    }
+    if (!layout_bold) {
+        layout_bold = pango_cairo_create_layout(cr);
+    }
+    if (!layout_mono) {
+        layout_mono = pango_cairo_create_layout(cr);
+    }
+    
+    if (!desc_normal) {
+        desc_normal = pango_font_description_from_string("Sans 12");
+    }
+    if (!desc_bold) {
+        desc_bold = pango_font_description_from_string("Sans Bold 12");
+    }
+    if (!desc_mono) {
+        desc_mono = pango_font_description_from_string("Monospace 10");
+    }
+    if (!desc_small) {
+        desc_small = pango_font_description_from_string("Sans 10");
+    }
+    
+    if (layout_normal) {
+        pango_layout_set_font_description(layout_normal, desc_normal);
+    }
+    if (layout_bold) {
+        pango_layout_set_font_description(layout_bold, desc_bold);
+    }
+    if (layout_mono) {
+        pango_layout_set_font_description(layout_mono, desc_mono);
+    }
+}
+
+void free_pango_objects() {
+    if (layout_normal) {
+        g_object_unref(layout_normal);
+        layout_normal = NULL;
+    }
+    if (layout_bold) {
+        g_object_unref(layout_bold);
+        layout_bold = NULL;
+    }
+    if (layout_mono) {
+        g_object_unref(layout_mono);
+        layout_mono = NULL;
+    }
+    if (desc_normal) {
+        pango_font_description_free(desc_normal);
+        desc_normal = NULL;
+    }
+    if (desc_bold) {
+        pango_font_description_free(desc_bold);
+        desc_bold = NULL;
+    }
+    if (desc_mono) {
+        pango_font_description_free(desc_mono);
+        desc_mono = NULL;
+    }
+    if (desc_small) {
+        pango_font_description_free(desc_small);
+        desc_small = NULL;
+    }
 }
 
 int is_image_file(const char *filename) {
@@ -503,27 +578,22 @@ void draw_path_bar(cairo_t *cr, int x, int y, int width, FileList *list) {
     
     char *display_path = get_display_path(full_path);
 
-    PangoLayout *layout = pango_cairo_create_layout(cr);
-    PangoFontDescription *desc = pango_font_description_from_string("Sans 11");
-    pango_layout_set_font_description(layout, desc);
-    pango_layout_set_ellipsize(layout, PANGO_ELLIPSIZE_MIDDLE);
+    PangoLayout *temp_layout = pango_cairo_create_layout(cr);
+    PangoFontDescription *temp_desc = pango_font_description_from_string("Sans 11");
+    pango_layout_set_font_description(temp_layout, temp_desc);
+    pango_layout_set_ellipsize(temp_layout, PANGO_ELLIPSIZE_MIDDLE);
     cairo_set_source_rgb(cr, TEXT_R/255.0, TEXT_G/255.0, TEXT_B/255.0);
     
     cairo_move_to(cr, x + MARGIN, (PATH_HEIGHT / 2) - 5);
-    pango_layout_set_text(layout, display_path ? display_path : "", -1);
-    pango_cairo_show_layout(cr, layout);
+    pango_layout_set_text(temp_layout, display_path ? display_path : "", -1);
+    pango_cairo_show_layout(cr, temp_layout);
 
-    pango_font_description_free(desc);
-    g_object_unref(layout);
+    pango_font_description_free(temp_desc);
+    g_object_unref(temp_layout);
     free(display_path);
 }
 
 void draw_file_entries(cairo_t *cr, FileList *list, int x, int y, int width, int height) {
-    PangoLayout *layout = pango_cairo_create_layout(cr);
-    PangoFontDescription *desc = pango_font_description_from_string("Sans 12");
-    PangoFontDescription *bold_desc = pango_font_description_from_string("Sans Bold 12");
-    pango_layout_set_font_description(layout, desc);
-
     cairo_set_source_rgb(cr, BG_R/255.0, BG_G/255.0, BG_B/255.0);
     cairo_rectangle(cr, x, y, width, height);
     cairo_fill(cr);
@@ -546,21 +616,18 @@ void draw_file_entries(cairo_t *cr, FileList *list, int x, int y, int width, int
         cairo_set_source_rgb(cr, TEXT_R/255.0, TEXT_G/255.0, TEXT_B/255.0);
         
         char display_name[256];
+        PangoLayout *layout_to_use;
         if (list->entries[i].is_dir) {
             snprintf(display_name, sizeof(display_name), "%s/", list->entries[i].name);
-            pango_layout_set_font_description(layout, bold_desc);
+            layout_to_use = layout_bold;
         } else {
             strncpy(display_name, list->entries[i].name, sizeof(display_name) - 1);
             display_name[sizeof(display_name) - 1] = '\0';
-            pango_layout_set_font_description(layout, desc);
+            layout_to_use = layout_normal;
         }
 
-        draw_text(cr, display_name, x + MARGIN, item_y, width - 2 * MARGIN, layout);
+        draw_text(cr, display_name, x + MARGIN, item_y, width - 2 * MARGIN, layout_to_use);
     }
-
-    pango_font_description_free(desc);
-    pango_font_description_free(bold_desc);
-    g_object_unref(layout);
 }
 
 void draw_file_list(cairo_t *cr, FileList *list, int x, int y, int width, int height) {
@@ -586,9 +653,6 @@ void draw_info_bar(cairo_t *cr, int x, int y, int width) {
     cairo_line_to(cr, x + width, y + INFO_HEIGHT);
     cairo_stroke(cr);
 
-    PangoLayout *layout = pango_cairo_create_layout(cr);
-    PangoFontDescription *desc = pango_font_description_from_string("Sans 10");
-    pango_layout_set_font_description(layout, desc);
     cairo_set_source_rgb(cr, TEXT_R/255.0, TEXT_G/255.0, TEXT_B/255.0);
 
     if (file_list.count > 0 && file_list.selected >= 0 && file_list.selected < file_list.count) {
@@ -597,11 +661,8 @@ void draw_info_bar(cairo_t *cr, int x, int y, int width) {
         char info[256];
         format_file_info(full_path, file_list.entries[file_list.selected].name, 
                          file_list.entries[file_list.selected].is_dir, info, sizeof(info));
-        draw_text(cr, info, x + MARGIN, (INFO_HEIGHT / 2) - 5, width - 2 * MARGIN, layout);
+        draw_text(cr, info, x + MARGIN, (INFO_HEIGHT / 2) - 5, width - 2 * MARGIN, desc_small);
     }
-
-    pango_font_description_free(desc);
-    g_object_unref(layout);
 }
 
 void draw_text_preview(cairo_t *cr, int x, int y, int width, int height, const char *text) {
@@ -611,20 +672,14 @@ void draw_text_preview(cairo_t *cr, int x, int y, int width, int height, const c
     cairo_rectangle(cr, x, y, width, height);
     cairo_fill(cr);
 
-    PangoLayout *layout = pango_cairo_create_layout(cr);
-    PangoFontDescription *desc = pango_font_description_from_string("Monospace 10");
-    pango_layout_set_font_description(layout, desc);
-    pango_layout_set_width(layout, (width - 2 * MARGIN) * PANGO_SCALE);
-    pango_layout_set_wrap(layout, PANGO_WRAP_WORD);
+    pango_layout_set_text(layout_mono, text, -1);
+    pango_layout_set_width(layout_mono, (width - 2 * MARGIN) * PANGO_SCALE);
+    pango_layout_set_wrap(layout_mono, PANGO_WRAP_WORD);
 
     cairo_set_source_rgb(cr, TEXT_R/255.0, TEXT_G/255.0, TEXT_B/255.0);
 
     cairo_move_to(cr, x + MARGIN, y + MARGIN);
-    pango_layout_set_text(layout, text, -1);
-    pango_cairo_show_layout(cr, layout);
-
-    pango_font_description_free(desc);
-    g_object_unref(layout);
+    pango_cairo_show_layout(cr, layout_mono);
 }
 
 void draw_html_preview(cairo_t *cr, int x, int y, int width, int height) {
@@ -687,10 +742,6 @@ void draw_preview(cairo_t *cr, int x, int y, int width, int height) {
         return;
     }
 
-    PangoLayout *layout = pango_cairo_create_layout(cr);
-    PangoFontDescription *desc = pango_font_description_from_string("Sans 12");
-    pango_layout_set_font_description(layout, desc);
-
     cairo_set_source_rgb(cr, TEXT_R/255.0, TEXT_G/255.0, TEXT_B/255.0);
     
     if (file_list.count > 0 && file_list.selected >= 0 && file_list.selected < file_list.count) {
@@ -709,14 +760,11 @@ void draw_preview(cairo_t *cr, int x, int y, int width, int height) {
         } else {
             char preview_text[256];
             snprintf(preview_text, sizeof(preview_text), "File: %s", file_list.entries[file_list.selected].name);
-            draw_text(cr, preview_text, x + MARGIN, preview_y + MARGIN + LINE_HEIGHT, width - 2 * MARGIN, layout);
+            draw_text(cr, preview_text, x + MARGIN, preview_y + MARGIN + LINE_HEIGHT, width - 2 * MARGIN, layout_normal);
         }
     } else {
-        draw_text(cr, "No selection", x + MARGIN, preview_y + MARGIN + LINE_HEIGHT, width - 2 * MARGIN, layout);
+        draw_text(cr, "No selection", x + MARGIN, preview_y + MARGIN + LINE_HEIGHT, width - 2 * MARGIN, layout_normal);
     }
-
-    pango_font_description_free(desc);
-    g_object_unref(layout);
 }
 
 void draw_image(cairo_t *cr, int x, int y, int width, int height) {
@@ -897,6 +945,11 @@ void draw_ui(int win_width, int win_height) {
     cairo_surface_t *surface = cairo_xlib_surface_create(dpy, win, DefaultVisual(dpy, screen), win_width, win_height);
     cairo_t *cr = cairo_create(surface);
 
+    // Initialize Pango objects on first draw
+    if (!layout_normal) {
+        init_pango_objects(cr);
+    }
+
     draw_file_list(cr, &file_list, 0, 0, left_width, win_height);
     draw_preview(cr, left_width, 0, right_width, win_height);
 
@@ -1035,6 +1088,7 @@ int main() {
     free_preview_pdf();
     free_preview_text();
     free_preview_media();
+    free_pango_objects();
     XDestroyWindow(dpy, win);
     XCloseDisplay(dpy);
     return 0;
