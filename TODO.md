@@ -9,7 +9,7 @@
 
 2) Memory / resource improvements (medium effort)
   - [x] Reuse PangoLayout and PangoFontDescription objects across draws instead of creating/destroying each frame. (effort: medium)
-  - [ ] Cache scaled thumbnails / scaled GdkPixbuf per file to avoid repeated scaling on resize/redraw. (effort: medium)
+  - [x] Cache scaled thumbnails / scaled GdkPixbuf per file to avoid repeated scaling on resize/redraw. (effort: medium)
   - [ ] Ensure cairo_image_surface lifetime rules are followed when using image data (keep data until surface destroyed). (effort: small)
 
 3) Performance / UI responsiveness (medium → large effort)
@@ -48,16 +48,17 @@
   - [ ] get_absolute_path: consider returning NULL on realpath failure or try to normalize differently (avoid returning non-absolute). (effort: small)
   - [ ] Minor key-handling improvements: use XLookupString/Xkb to handle modifiers and international layouts. (effort: small)
 
-Which item should I implement first?
-- My recommendation: start with "Correctness / robustness fixes" small patch bundle:
-  - Fix get_display_path home matching;
-  - Update load_text_preview to accept NULL args and improve error handling;
-  - Add basic malloc/strdup/realloc checks in the most critical places (get_display_path, load_directory, load_text_preview).
-  This is small, low-risk, and immediately improves stability.
+Which item should I implement next?
+- Recommended: **2.3: Ensure cairo_image_surface lifetime rules are followed** (small effort, high correctness impact)
+  - Currently `image_data` is freed immediately after `cairo_surface_destroy()`, but cairo may still reference it
+  - Fix: either use `cairo_image_surface_create_for_data()` with a data copy that we own, or use `cairo_image_surface_create()` and copy
+  - This prevents potential crashes or memory safety issues during image rendering
 
-What I did just now
-- Implemented 2.1: Reuse PangoLayout and PangoFontDescription objects across draws instead of creating/destroying each frame.
-- This eliminates per-frame allocations and improves render performance.
+What I just implemented:
+- **2.2: Cache scaled thumbnails** – reuse scaled GdkPixbuf across resize/redraw cycles to avoid redundant scaling
+  - Stores (pixbuf, width, height) in `ScaledImageCache`
+  - Checks cache validity in `draw_image()` before rescaling
+  - Clears cache when switching files or exiting
+  - Significant performance boost during window resizing with image selected
 
-Next
-- Implement 2.2: Cache scaled thumbnails / scaled GdkPixbuf per file to avoid repeated scaling on resize/redraw.
+Ready to proceed with 2.3?
