@@ -4,6 +4,7 @@
 !*.c
 !*.h
 !Makefile
+!TODO.md
 
 !.github/
 !.github/**
