@@ -10,7 +10,7 @@
 2) Memory / resource improvements (medium effort)
   - [x] Reuse PangoLayout and PangoFontDescription objects across draws instead of creating/destroying each frame. (effort: medium)
   - [x] Cache scaled thumbnails / scaled GdkPixbuf per file to avoid repeated scaling on resize/redraw. (effort: medium)
-  - [ ] Ensure cairo_image_surface lifetime rules are followed when using image data (keep data until surface destroyed). (effort: small)
+  - [x] Ensure cairo_image_surface lifetime rules are followed when using image data (keep data until surface destroyed). (effort: small)
 
 3) Performance / UI responsiveness (medium → large effort)
   - [ ] Make preview loading asynchronous so UI doesn't block (options: worker thread with mutex + main thread redraw; or non-blocking child processes integrated with event loop). (effort: large)
@@ -19,7 +19,7 @@
 
 4) Type detection and preview robustness (medium effort)
   - [ ] Replace extension-only detection with libmagic or GFileInfo for mime detection. (effort: medium)
-  - [ ] Add graceful fallback if external tools (lynx, pdfinfo, mediainfo, mp3info) are missing (display message in preview). (effort: small)
+  - [x] Add graceful fallback if external tools (lynx, pdfinfo, mediainfo, mp3info) are missing (display message in preview). (effort: small)
   - [ ] Sanitize and validate paths passed to exec/posix_spawn. (effort: small)
 
 5) Usability features (medium → large effort)
@@ -49,16 +49,19 @@
   - [ ] Minor key-handling improvements: use XLookupString/Xkb to handle modifiers and international layouts. (effort: small)
 
 Which item should I implement next?
-- Recommended: **2.3: Ensure cairo_image_surface lifetime rules are followed** (small effort, high correctness impact)
-  - Currently `image_data` is freed immediately after `cairo_surface_destroy()`, but cairo may still reference it
-  - Fix: either use `cairo_image_surface_create_for_data()` with a data copy that we own, or use `cairo_image_surface_create()` and copy
-  - This prevents potential crashes or memory safety issues during image rendering
+- Recommended: **4.1: Replace extension-only detection with libmagic or GFileInfo** (medium effort, improves accuracy)
+  - Current approach only checks file extensions, which can be unreliable
+  - libmagic (via magic.h) reads file "magic bytes" to detect MIME type more accurately
+  - Alternative: GFileInfo API (glib) wraps libmagic and is less verbose
+  - Benefit: .txt files without extension, mis-named files, etc. are correctly identified
+  - Can fall back to extension-based detection if libmagic unavailable
+  - Wrap calls with availability checks like 4.2 did for external tools
 
 What I just implemented:
-- **2.2: Cache scaled thumbnails** – reuse scaled GdkPixbuf across resize/redraw cycles to avoid redundant scaling
-  - Stores (pixbuf, width, height) in `ScaledImageCache`
-  - Checks cache validity in `draw_image()` before rescaling
-  - Clears cache when switching files or exiting
-  - Significant performance boost during window resizing with image selected
+- **4.2: Graceful fallback for missing external tools** – detect lynx/pdfinfo/mediainfo/mp3info at startup
+  - Tool availability checked once in main() before UI loop
+  - When tool missing, display installation instructions for Ubuntu/Debian/macOS/Fedora
+  - Users see helpful message instead of blank preview or silent failure
+  - Result: improved UX with minimal overhead
 
-Ready to proceed with 2.3?
+Progress: 12/33 items complete (36%)
