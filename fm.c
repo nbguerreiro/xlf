@@ -66,6 +66,7 @@ int preview_is_text;
 PangoLayout *layout_normal = NULL;
 PangoLayout *layout_bold = NULL;
 PangoLayout *layout_mono = NULL;
+PangoLayout *layout_small = NULL;
 PangoFontDescription *desc_normal = NULL;
 PangoFontDescription *desc_bold = NULL;
 PangoFontDescription *desc_mono = NULL;
@@ -138,6 +139,9 @@ void init_pango_objects(cairo_t *cr) {
     if (!layout_mono) {
         layout_mono = pango_cairo_create_layout(cr);
     }
+    if (!layout_small) {
+        layout_small = pango_cairo_create_layout(cr);
+    }
     
     if (!desc_normal) {
         desc_normal = pango_font_description_from_string("Sans 12");
@@ -161,6 +165,9 @@ void init_pango_objects(cairo_t *cr) {
     if (layout_mono) {
         pango_layout_set_font_description(layout_mono, desc_mono);
     }
+    if (layout_small) {
+        pango_layout_set_font_description(layout_small, desc_small);
+    }
 }
 
 void free_pango_objects() {
@@ -175,6 +182,10 @@ void free_pango_objects() {
     if (layout_mono) {
         g_object_unref(layout_mono);
         layout_mono = NULL;
+    }
+    if (layout_small) {
+        g_object_unref(layout_small);
+        layout_small = NULL;
     }
     if (desc_normal) {
         pango_font_description_free(desc_normal);
@@ -661,7 +672,7 @@ void draw_info_bar(cairo_t *cr, int x, int y, int width) {
         char info[256];
         format_file_info(full_path, file_list.entries[file_list.selected].name, 
                          file_list.entries[file_list.selected].is_dir, info, sizeof(info));
-        draw_text(cr, info, x + MARGIN, (INFO_HEIGHT / 2) - 5, width - 2 * MARGIN, desc_small);
+        draw_text(cr, info, x + MARGIN, (INFO_HEIGHT / 2) - 5, width - 2 * MARGIN, layout_small);
     }
 }
 
