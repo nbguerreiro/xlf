@@ -19,7 +19,7 @@
 
 4) Type detection and preview robustness (medium effort)
   - [ ] Replace extension-only detection with libmagic or GFileInfo for mime detection. (effort: medium)
-  - [ ] Add graceful fallback if external tools (lynx, pdfinfo, mediainfo, mp3info) are missing (display message in preview). (effort: small)
+  - [x] Add graceful fallback if external tools (lynx, pdfinfo, mediainfo, mp3info) are missing (display message in preview). (effort: small)
   - [ ] Sanitize and validate paths passed to exec/posix_spawn. (effort: small)
 
 5) Usability features (medium → large effort)
@@ -49,16 +49,19 @@
   - [ ] Minor key-handling improvements: use XLookupString/Xkb to handle modifiers and international layouts. (effort: small)
 
 Which item should I implement next?
-- Recommended: **4.2: Add graceful fallback for missing external tools** (small effort, high UX impact)
-  - When lynx, pdfinfo, mediainfo, or mp3info are missing, display a user-friendly message instead of silent failure
-  - Detect tool availability at startup or on-demand (check $PATH or test with execlp)
-  - Show message like "Tool 'lynx' not found. Install it to preview HTML files."
+- Recommended: **4.1: Replace extension-only detection with libmagic or GFileInfo** (medium effort, improves accuracy)
+  - Current approach only checks file extensions, which can be unreliable
+  - libmagic (via magic.h) reads file "magic bytes" to detect MIME type more accurately
+  - Alternative: GFileInfo API (glib) wraps libmagic and is less verbose
+  - Benefit: .txt files without extension, mis-named files, etc. are correctly identified
+  - Can fall back to extension-based detection if libmagic unavailable
+  - Wrap calls with availability checks like 4.2 did for external tools
 
 What I just implemented:
-- **2.3: Ensure cairo_image_surface lifetime rules** – replaced `cairo_image_surface_create_for_data()` with `cairo_image_surface_create()`
-  - Cairo now owns and manages surface memory
-  - Eliminates potential crashes from accessing freed memory after destroy
-  - Applies fix in both cached and fresh scaling paths in `draw_image()`
-  - Result: high correctness impact with minimal performance cost
+- **4.2: Graceful fallback for missing external tools** – detect lynx/pdfinfo/mediainfo/mp3info at startup
+  - Tool availability checked once in main() before UI loop
+  - When tool missing, display installation instructions for Ubuntu/Debian/macOS/Fedora
+  - Users see helpful message instead of blank preview or silent failure
+  - Result: improved UX with minimal overhead
 
-Ready to proceed with 4.2?
+Progress: 12/33 items complete (36%)
