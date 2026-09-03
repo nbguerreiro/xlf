@@ -8,7 +8,7 @@
   - [x] Avoid silent truncation and ensure buffer sizes when formatting paths/info. (effort: small)
 
 2) Memory / resource improvements (medium effort)
-  - [ ] Reuse PangoLayout and PangoFontDescription objects across draws instead of creating/destroying each frame. (effort: medium)
+  - [x] Reuse PangoLayout and PangoFontDescription objects across draws instead of creating/destroying each frame. (effort: medium)
   - [ ] Cache scaled thumbnails / scaled GdkPixbuf per file to avoid repeated scaling on resize/redraw. (effort: medium)
   - [ ] Ensure cairo_image_surface lifetime rules are followed when using image data (keep data until surface destroyed). (effort: small)
 
@@ -56,7 +56,8 @@ Which item should I implement first?
   This is small, low-risk, and immediately improves stability.
 
 What I did just now
-- Converted the earlier review and suggestions into the TODO list above, grouped and prioritized, and saved it in this message so we can iterate.
+- Implemented 2.1: Reuse PangoLayout and PangoFontDescription objects across draws instead of creating/destroying each frame.
+- This eliminates per-frame allocations and improves render performance.
 
 Next
-- Tell me which TODO to start. If you accept my recommendation, I will implement that small patch set and show the code diff.
+- Implement 2.2: Cache scaled thumbnails / scaled GdkPixbuf per file to avoid repeated scaling on resize/redraw.
