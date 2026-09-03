@@ -827,13 +827,30 @@ void draw_image(cairo_t *cr, int x, int y, int width, int height) {
         int s_height = gdk_pixbuf_get_height(scaled);
         int s_n_channels = gdk_pixbuf_get_n_channels(scaled);
         
+        // Ensure we have alpha channel
+        if (s_n_channels != 4) {
+            GdkPixbuf *with_alpha = gdk_pixbuf_add_alpha(scaled, FALSE, 0, 0, 0);
+            g_object_unref(scaled);
+            scaled = with_alpha;
+            s_n_channels = 4;
+        }
+        
         guchar *pixels = gdk_pixbuf_get_pixels(scaled);
         int rowstride = gdk_pixbuf_get_rowstride(scaled);
         
-        guchar *image_data = g_malloc0(s_height * s_width * 4);
+        // Create cairo surface with owned memory
+        cairo_surface_t *image_surface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, s_width, s_height);
+        if (cairo_surface_status(image_surface) != CAIRO_STATUS_SUCCESS) {
+            cairo_surface_destroy(image_surface);
+            return;
+        }
+        
+        guchar *surface_data = cairo_image_surface_get_data(image_surface);
+        int surface_stride = cairo_image_surface_get_stride(image_surface);
+        
         for (int py = 0; py < s_height; py++) {
             guchar *src = pixels + py * rowstride;
-            guint32 *dst = (guint32*)(image_data + py * s_width * 4);
+            guint32 *dst = (guint32*)(surface_data + py * surface_stride);
             for (int px = 0; px < s_width; px++) {
                 double a = src[3] / 255.0;
                 guint8 r = (guint8)(src[0] * a);
@@ -845,13 +862,14 @@ void draw_image(cairo_t *cr, int x, int y, int width, int height) {
             }
         }
         
-        cairo_surface_t *image_surface = cairo_image_surface_create_for_data(
-            image_data, CAIRO_FORMAT_ARGB32, s_width, s_height, s_width * 4
-        );
+        cairo_surface_mark_dirty(image_surface);
         cairo_set_source_surface(cr, image_surface, draw_x, draw_y);
         cairo_paint(cr);
         cairo_surface_destroy(image_surface);
-        g_free(image_data);
+        
+        if (s_n_channels != gdk_pixbuf_get_n_channels(scaled_image_cache.pixbuf)) {
+            g_object_unref(scaled);
+        }
         return;
     }
 
@@ -876,14 +894,24 @@ void draw_image(cairo_t *cr, int x, int y, int width, int height) {
     scaled_image_cache.width = s_width;
     scaled_image_cache.height = s_height;
     
-    // Get pixbuf data and render
+    // Get pixbuf data and render using cairo's owned surface
     guchar *pixels = gdk_pixbuf_get_pixels(scaled);
     int rowstride = gdk_pixbuf_get_rowstride(scaled);
     
-    guchar *image_data = g_malloc0(s_height * s_width * 4);
+    // Create cairo surface with owned memory
+    cairo_surface_t *image_surface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, s_width, s_height);
+    if (cairo_surface_status(image_surface) != CAIRO_STATUS_SUCCESS) {
+        cairo_surface_destroy(image_surface);
+        g_object_unref(scaled);
+        return;
+    }
+    
+    guchar *surface_data = cairo_image_surface_get_data(image_surface);
+    int surface_stride = cairo_image_surface_get_stride(image_surface);
+    
     for (int py = 0; py < s_height; py++) {
         guchar *src = pixels + py * rowstride;
-        guint32 *dst = (guint32*)(image_data + py * s_width * 4);
+        guint32 *dst = (guint32*)(surface_data + py * surface_stride);
         for (int px = 0; px < s_width; px++) {
             double a = src[3] / 255.0;
             guint8 r = (guint8)(src[0] * a);
@@ -895,13 +923,10 @@ void draw_image(cairo_t *cr, int x, int y, int width, int height) {
         }
     }
     
-    cairo_surface_t *image_surface = cairo_image_surface_create_for_data(
-        image_data, CAIRO_FORMAT_ARGB32, s_width, s_height, s_width * 4
-    );
+    cairo_surface_mark_dirty(image_surface);
     cairo_set_source_surface(cr, image_surface, draw_x, draw_y);
     cairo_paint(cr);
     cairo_surface_destroy(image_surface);
-    g_free(image_data);
     g_object_unref(scaled);
 }
 
