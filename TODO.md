@@ -36,7 +36,7 @@
 7) Project & build hygiene (small effort)
   - [x] Add a Makefile with pkg-config for dependencies and sensible CFLAGS (e.g., -std=c11 -Wall -Wextra). (effort: small)
   - [x] Add targets: test, run, lint, sanitize. (effort: small)
-  - [ ] Add README explaining dependencies and runtime behavior. (effort: small)
+  - [x] Add README explaining dependencies and runtime behavior. (effort: small)
 
 8) Refactor / architecture (large effort)
   - [ ] Split into modules: filelist.{c,h}, preview.{c,h}, ui.{c,h}, util.{c,h}. (effort: large)
