@@ -1602,7 +1602,7 @@ static void open_file_with_xdg(const char *path) {
     }
 }
 
-void handle_mouse_button(XButtonEvent *ev, int win_width, int win_height) {
+void handle_mouse_button(const XButtonEvent *ev, int win_width, int win_height) {
     if (ev->button != Button1 || ev->x < 0 || ev->x >= win_width) return;
 
     int left_width = (int)(win_width * PANE_RATIO);
