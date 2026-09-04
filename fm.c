@@ -1426,6 +1426,17 @@ void request_preview() {
         const FileEntry *entry = &file_list.entries[file_list.selected];
         char path[4096];
 
+        // ".." is a navigation entry, not a previewable directory. Keep the
+        // preview pane blank while it is selected.
+        if (strcmp(entry->name, "..") == 0) {
+            preview_task = task;
+            preview_task_pending = 0;
+            pthread_cond_signal(&preview_cond);
+            pthread_mutex_unlock(&preview_mutex);
+            clear_preview_state();
+            return;
+        }
+
         snprintf(path, sizeof(path), "%s/%s", file_list.path, entry->name);
         task.path = strdup(path);
 
