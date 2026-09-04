@@ -15,7 +15,7 @@
 3) Performance / UI responsiveness (medium → large effort)
   - [x] Make preview loading asynchronous so UI doesn't block (dedicated worker thread, generation-based stale-result suppression, and a wake pipe integrated with the X11 event loop). (effort: large)
   - [x] Use double-buffering / reuse cairo surface (avoid creating/destroying cairo_xlib_surface every draw). (effort: medium)
-  - [ ] Reduce per-frame allocations by reusing buffers and layouts. (effort: medium)
+  - [x] Reduce per-frame allocations by reusing buffers and layouts. (effort: medium)
 
 4) Type detection and preview robustness (medium effort)
   - [x] Replace extension-only detection with libmagic or GFileInfo for mime detection. (effort: medium)
