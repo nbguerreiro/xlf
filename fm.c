@@ -309,6 +309,13 @@ void free_pango_objects() {
     }
 }
 
+int is_image_file(const char *filename);
+int is_pdf_file(const char *filename);
+int is_text_file(const char *filename);
+int is_html_file(const char *filename);
+int is_mp3_file(const char *filename);
+int is_media_file(const char *filename);
+
 typedef enum {
     FILE_TYPE_UNKNOWN,
     FILE_TYPE_IMAGE,
