@@ -19,6 +19,7 @@
 #include <cairo-xlib.h>
 #include <pango/pangocairo.h>
 #include <gdk-pixbuf/gdk-pixbuf.h>
+#include <gio/gio.h>
 
 #define BG_R 223
 #define BG_G 191
@@ -306,6 +307,66 @@ void free_pango_objects() {
         pango_font_description_free(desc_small);
         desc_small = NULL;
     }
+}
+
+int is_image_file(const char *filename);
+int is_pdf_file(const char *filename);
+int is_text_file(const char *filename);
+int is_html_file(const char *filename);
+int is_mp3_file(const char *filename);
+int is_media_file(const char *filename);
+
+typedef enum {
+    FILE_TYPE_UNKNOWN,
+    FILE_TYPE_IMAGE,
+    FILE_TYPE_TEXT,
+    FILE_TYPE_HTML,
+    FILE_TYPE_PDF,
+    FILE_TYPE_MP3,
+    FILE_TYPE_MEDIA
+} FileType;
+
+FileType detect_file_type_mime(const char *path) {
+    GFile *file;
+    GFileInfo *info;
+    const char *content_type;
+    FileType type = FILE_TYPE_UNKNOWN;
+
+    if (!path) return FILE_TYPE_UNKNOWN;
+
+    file = g_file_new_for_path(path);
+    info = g_file_query_info(file, G_FILE_ATTRIBUTE_STANDARD_CONTENT_TYPE,
+                             G_FILE_QUERY_INFO_NONE, NULL, NULL);
+    g_object_unref(file);
+    if (!info) return FILE_TYPE_UNKNOWN;
+
+    content_type = g_file_info_get_content_type(info);
+    if (content_type) {
+        if (g_str_has_prefix(content_type, "image/")) type = FILE_TYPE_IMAGE;
+        else if (g_content_type_is_a(content_type, "text/html") ||
+                 g_content_type_is_a(content_type, "application/xhtml+xml")) type = FILE_TYPE_HTML;
+        else if (g_content_type_is_a(content_type, "application/pdf")) type = FILE_TYPE_PDF;
+        else if (g_content_type_is_a(content_type, "audio/mpeg")) type = FILE_TYPE_MP3;
+        else if (g_str_has_prefix(content_type, "text/")) type = FILE_TYPE_TEXT;
+        else if (g_str_has_prefix(content_type, "audio/") ||
+                 g_str_has_prefix(content_type, "video/")) type = FILE_TYPE_MEDIA;
+    }
+
+    g_object_unref(info);
+    return type;
+}
+
+FileType detect_file_type(const char *path, const char *filename) {
+    FileType type = detect_file_type_mime(path);
+    if (type != FILE_TYPE_UNKNOWN) return type;
+
+    if (is_image_file(filename)) return FILE_TYPE_IMAGE;
+    if (is_text_file(filename)) return FILE_TYPE_TEXT;
+    if (is_html_file(filename)) return FILE_TYPE_HTML;
+    if (is_pdf_file(filename)) return FILE_TYPE_PDF;
+    if (is_mp3_file(filename)) return FILE_TYPE_MP3;
+    if (is_media_file(filename)) return FILE_TYPE_MEDIA;
+    return FILE_TYPE_UNKNOWN;
 }
 
 int is_image_file(const char *filename) {
@@ -1311,19 +1372,20 @@ void request_preview() {
         if (task.path) {
             if (entry->is_dir) {
                 task.kind = PREVIEW_RESULT_DIR;
-            } else if (is_image_file(entry->name)) {
-                task.kind = PREVIEW_RESULT_IMAGE;
-            } else if (is_text_file(entry->name)) {
-                task.kind = PREVIEW_RESULT_TEXT;
-            } else if (is_pdf_file(entry->name)) {
-                task.kind = PREVIEW_RESULT_PDF;
-            } else if (is_html_file(entry->name)) {
-                task.kind = PREVIEW_RESULT_HTML;
-            } else if (is_media_file(entry->name)) {
-                task.kind = PREVIEW_RESULT_MEDIA;
             } else {
-                free(task.path);
-                task.path = NULL;
+                switch (detect_file_type(path, entry->name)) {
+                    case FILE_TYPE_IMAGE: task.kind = PREVIEW_RESULT_IMAGE; break;
+                    case FILE_TYPE_TEXT: task.kind = PREVIEW_RESULT_TEXT; break;
+                    case FILE_TYPE_HTML: task.kind = PREVIEW_RESULT_HTML; break;
+                    case FILE_TYPE_PDF: task.kind = PREVIEW_RESULT_PDF; break;
+                    case FILE_TYPE_MP3:
+                    case FILE_TYPE_MEDIA: task.kind = PREVIEW_RESULT_MEDIA; break;
+                    case FILE_TYPE_UNKNOWN: task.kind = PREVIEW_RESULT_NONE; break;
+                }
+                if (task.kind == PREVIEW_RESULT_NONE) {
+                    free(task.path);
+                    task.path = NULL;
+                }
             }
         }
     }
