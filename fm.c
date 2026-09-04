@@ -109,6 +109,9 @@ int preview_wake_pipe[2] = {-1, -1};
 unsigned long preview_generation = 0;
 int preview_worker_started = 0;
 
+Time last_click_time = {0, 0};
+int last_click_index = -1;
+
 // Reused Cairo surfaces for the window and off-screen frame buffer.
 cairo_surface_t *window_surface = NULL;
 cairo_surface_t *backbuffer_surface = NULL;
@@ -1577,6 +1580,56 @@ void draw_ui(int win_width, int win_height) {
         cairo_destroy(window_cr);
     }
 }
+static void open_file_with_xdg(const char *path) {
+    pid_t pid = fork();
+    if (pid == 0) {
+        execlp("xdg-open", "xdg-open", path, (char *)NULL);
+        _exit(127);
+    }
+}
+
+void handle_mouse_button(XButtonEvent *ev, int win_width, int win_height) {
+    if (ev->button != Button1 || ev->x < 0 || ev->x >= win_width) return;
+
+    int left_width = (int)(win_width * PANE_RATIO);
+    if (ev->x >= left_width || ev->y < PATH_HEIGHT) return;
+
+    int list_y = ev->y - PATH_HEIGHT;
+    int visible_items = (win_height - PATH_HEIGHT) / LINE_HEIGHT;
+    if (visible_items <= 0 || file_list.count <= 0) return;
+
+    int scroll_offset = 0;
+    if (file_list.selected >= visible_items) {
+        scroll_offset = file_list.selected - visible_items + 1;
+    }
+
+    int row = list_y / LINE_HEIGHT;
+    int index = scroll_offset + row;
+    if (row < 0 || row >= visible_items || index < 0 || index >= file_list.count) return;
+
+    file_list.selected = index;
+    request_preview();
+
+    if (last_click_index == index && ev->time - last_click_time < 400) {
+        char path[PATH_MAX];
+        int n = snprintf(path, sizeof(path), "%s/%s",
+                         file_list.path ? file_list.path : ".",
+                         file_list.entries[index].name);
+        if (n >= 0 && (size_t)n < sizeof(path)) {
+            if (file_list.entries[index].is_dir) {
+                load_directory(&file_list, path);
+                request_preview();
+            } else {
+                open_file_with_xdg(path);
+            }
+        }
+        last_click_index = -1;
+    } else {
+        last_click_index = index;
+        last_click_time = ev->time;
+    }
+}
+
 void handle_key(XKeyEvent *ev) {
     KeySym ks = XLookupKeysym(ev, 0);
 
@@ -1659,7 +1712,7 @@ int main() {
                                win_width, win_height, 0,
                                BlackPixel(dpy, screen), bg_color.pixel);
     XStoreName(dpy, win, "File Manager");
-    XSelectInput(dpy, win, ExposureMask | KeyPressMask | StructureNotifyMask);
+    XSelectInput(dpy, win, ExposureMask | KeyPressMask | ButtonPressMask | StructureNotifyMask);
     XMapWindow(dpy, win);
 
     init_file_list(&file_list, ".");
@@ -1695,6 +1748,18 @@ int main() {
                         unsigned int width, height, border, depth;
                         XGetGeometry(dpy, win, &root, &x, &y, &width, &height, &border, &depth);
                         draw_ui(width, height);
+                    }
+                    break;
+
+                case ButtonPress:
+                    handle_mouse_button(&ev.xbutton, win_width, win_height);
+                    {
+                        Window root;
+                        int x, y;
+                        unsigned int width, height, border, depth;
+                        if (XGetGeometry(dpy, win, &root, &x, &y, &width, &height, &border, &depth)) {
+                            draw_ui(width, height);
+                        }
                     }
                     break;
 
