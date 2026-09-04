@@ -109,6 +109,12 @@ int preview_wake_pipe[2] = {-1, -1};
 unsigned long preview_generation = 0;
 int preview_worker_started = 0;
 
+// Reused Cairo surfaces for the window and off-screen frame buffer.
+cairo_surface_t *window_surface = NULL;
+cairo_surface_t *backbuffer_surface = NULL;
+int surface_width = 0;
+int surface_height = 0;
+
 // Cached Pango objects (reused across frames)
 PangoLayout *layout_normal = NULL;
 PangoLayout *layout_bold = NULL;
@@ -1438,22 +1444,78 @@ void stop_preview_worker() {
     preview_wake_pipe[1] = -1;
 }
 
+void free_draw_surfaces() {
+    if (backbuffer_surface) {
+        cairo_surface_destroy(backbuffer_surface);
+        backbuffer_surface = NULL;
+    }
+    if (window_surface) {
+        cairo_surface_destroy(window_surface);
+        window_surface = NULL;
+    }
+    surface_width = 0;
+    surface_height = 0;
+}
+
+int ensure_draw_surfaces(int width, int height) {
+    if (width <= 0 || height <= 0) return 0;
+
+    if (!window_surface) {
+        window_surface = cairo_xlib_surface_create(
+            dpy, win, DefaultVisual(dpy, screen), width, height);
+        if (cairo_surface_status(window_surface) != CAIRO_STATUS_SUCCESS) {
+            free_draw_surfaces();
+            return 0;
+        }
+    } else {
+        cairo_xlib_surface_set_size(window_surface, width, height);
+    }
+
+    if (!backbuffer_surface ||
+        surface_width != width || surface_height != height) {
+        cairo_surface_t *new_backbuffer =
+            cairo_image_surface_create(CAIRO_FORMAT_ARGB32, width, height);
+        if (cairo_surface_status(new_backbuffer) != CAIRO_STATUS_SUCCESS) {
+            cairo_surface_destroy(new_backbuffer);
+            return 0;
+        }
+
+        if (backbuffer_surface) {
+            cairo_surface_destroy(backbuffer_surface);
+        }
+        backbuffer_surface = new_backbuffer;
+        surface_width = width;
+        surface_height = height;
+    }
+
+    return 1;
+}
+
 void draw_ui(int win_width, int win_height) {
     int left_width = (int)(win_width * PANE_RATIO);
     int right_width = win_width - left_width;
 
-    cairo_surface_t *surface = cairo_xlib_surface_create(dpy, win, DefaultVisual(dpy, screen), win_width, win_height);
-    cairo_t *cr = cairo_create(surface);
+    if (!ensure_draw_surfaces(win_width, win_height)) return;
 
-    // Initialize Pango objects on first draw
+    cairo_t *cr = cairo_create(backbuffer_surface);
+    if (cairo_status(cr) != CAIRO_STATUS_SUCCESS) {
+        cairo_destroy(cr);
+        return;
+    }
+
+    // Initialize Pango objects once, using the reusable backbuffer context.
     if (!layout_normal) {
         init_pango_objects(cr);
     }
 
+    cairo_set_operator(cr, CAIRO_OPERATOR_SOURCE);
+    cairo_set_source_rgb(cr, BG_R/255.0, BG_G/255.0, BG_B/255.0);
+    cairo_paint(cr);
+    cairo_set_operator(cr, CAIRO_OPERATOR_OVER);
+
     draw_file_list(cr, &file_list, 0, 0, left_width, win_height);
     draw_preview(cr, left_width, 0, right_width, win_height);
 
-    // Divider line
     cairo_set_source_rgb(cr, 150/255.0, 150/255.0, 150/255.0);
     cairo_set_line_width(cr, 1.0);
     cairo_move_to(cr, left_width, 0);
@@ -1461,12 +1523,20 @@ void draw_ui(int win_width, int win_height) {
     cairo_stroke(cr);
 
     cairo_destroy(cr);
-    cairo_surface_flush(surface);
-    cairo_surface_destroy(surface);
-    // Flush the Xlib connection so preview redraws become visible immediately.
-    XFlush(dpy);
-}
 
+    // Present the completed frame to the X11 window in one operation.
+    cairo_t *window_cr = cairo_create(window_surface);
+    if (cairo_status(window_cr) == CAIRO_STATUS_SUCCESS) {
+        cairo_set_source_surface(window_cr, backbuffer_surface, 0, 0);
+        cairo_set_operator(window_cr, CAIRO_OPERATOR_SOURCE);
+        cairo_paint(window_cr);
+        cairo_surface_flush(window_surface);
+        cairo_destroy(window_cr);
+        XFlush(dpy);
+    } else {
+        cairo_destroy(window_cr);
+    }
+}
 void handle_key(XKeyEvent *ev) {
     KeySym ks = XLookupKeysym(ev, 0);
 
@@ -1663,6 +1733,7 @@ int main() {
     free_preview_media();
     free_scaled_image_cache();
     free_pango_objects();
+    free_draw_surfaces();
     XDestroyWindow(dpy, win);
     XCloseDisplay(dpy);
     return 0;
