@@ -1461,7 +1461,10 @@ void draw_ui(int win_width, int win_height) {
     cairo_stroke(cr);
 
     cairo_destroy(cr);
+    cairo_surface_flush(surface);
     cairo_surface_destroy(surface);
+    // Flush the Xlib connection so preview redraws become visible immediately.
+    XFlush(dpy);
 }
 
 void handle_key(XKeyEvent *ev) {
