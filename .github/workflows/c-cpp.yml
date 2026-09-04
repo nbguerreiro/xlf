@@ -83,6 +83,20 @@ jobs:
         run: |
           scan-build --status-bugs make clean all
 
+      - name: Save analyzer report
+        if: always()
+        run: |
+          mkdir -p scan-build-report
+          cp -r /tmp/scan-build-*/* scan-build-report/ 2>/dev/null || true
+
+      - name: Upload analyzer report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: scan-build-report
+          path: scan-build-report
+          if-no-files-found: ignore
+
       - name: cppcheck
         run: |
           cppcheck             --enable=warning,style,performance,portability             --error-exitcode=1             --inline-suppr             fm.c
