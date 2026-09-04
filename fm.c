@@ -490,8 +490,34 @@ int is_small_image(const char *path, off_t max_size) {
     return st.st_size <= max_size;
 }
 
+static int valid_preview_path(const char *path) {
+    if (!path || path[0] == '\0') return 0;
+
+    // exec-family calls do not invoke a shell, but control characters in a
+    // pathname can still confuse helper programs or produce unsafe output.
+    for (const unsigned char *p = (const unsigned char *)path; *p; ++p) {
+        if (*p < 0x20 || *p == 0x7f) return 0;
+    }
+
+    return 1;
+}
+
+static int valid_preview_command(const char *cmd) {
+    static const char *const allowed[] = {
+        "lynx", "pdfinfo", "mediainfo", "mp3info"
+    };
+
+    if (!cmd || cmd[0] == '\0') return 0;
+
+    for (size_t i = 0; i < sizeof(allowed) / sizeof(allowed[0]); ++i) {
+        if (strcmp(cmd, allowed[i]) == 0) return 1;
+    }
+
+    return 0;
+}
+
 char *load_text_preview(const char *cmd, const char *arg1, const char *arg2, const char *path) {
-    if (!cmd || !path) return NULL;
+    if (!valid_preview_command(cmd) || !valid_preview_path(path)) return NULL;
 
     int pipefd[2];
     if (pipe(pipefd) == -1) {
