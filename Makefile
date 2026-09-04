@@ -2,7 +2,7 @@ CC := gcc
 PKG_CFLAGS := $(shell pkg-config --cflags cairo pangocairo pango gdk-pixbuf-2.0 x11)
 PKG_LIBS := $(shell pkg-config --libs cairo pangocairo pango gdk-pixbuf-2.0 x11)
 CFLAGS := -std=c11 -O2 -Wall -Wextra $(PKG_CFLAGS)
-LDFLAGS := $(PKG_LIBS)
+LDFLAGS := $(PKG_LIBS) -pthread
 SRC := fm.c
 BIN := fm
 
