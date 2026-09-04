@@ -997,7 +997,6 @@ void draw_image(cairo_t *cr, int x, int y, int width, int height) {
         GdkPixbuf *with_alpha = gdk_pixbuf_add_alpha(scaled, FALSE, 0, 0, 0);
         g_object_unref(scaled);
         scaled = with_alpha;
-        s_n_channels = 4;
     }
     
     // Update cache
