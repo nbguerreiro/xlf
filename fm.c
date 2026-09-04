@@ -120,10 +120,12 @@ PangoLayout *layout_normal = NULL;
 PangoLayout *layout_bold = NULL;
 PangoLayout *layout_mono = NULL;
 PangoLayout *layout_small = NULL;
+PangoLayout *layout_path = NULL;
 PangoFontDescription *desc_normal = NULL;
 PangoFontDescription *desc_bold = NULL;
 PangoFontDescription *desc_mono = NULL;
 PangoFontDescription *desc_small = NULL;
+PangoFontDescription *desc_path = NULL;
 
 // Cached scaled image (reused across resize/redraw cycles)
 ScaledImageCache scaled_image_cache = { NULL, 0, 0 };
@@ -252,6 +254,9 @@ void init_pango_objects(cairo_t *cr) {
     if (!layout_small) {
         layout_small = pango_cairo_create_layout(cr);
     }
+    if (!layout_path) {
+        layout_path = pango_cairo_create_layout(cr);
+    }
     
     if (!desc_normal) {
         desc_normal = pango_font_description_from_string("Sans 12");
@@ -265,6 +270,9 @@ void init_pango_objects(cairo_t *cr) {
     if (!desc_small) {
         desc_small = pango_font_description_from_string("Sans 10");
     }
+    if (!desc_path) {
+        desc_path = pango_font_description_from_string("Sans 11");
+    }
     
     if (layout_normal) {
         pango_layout_set_font_description(layout_normal, desc_normal);
@@ -277,6 +285,10 @@ void init_pango_objects(cairo_t *cr) {
     }
     if (layout_small) {
         pango_layout_set_font_description(layout_small, desc_small);
+    }
+    if (layout_path) {
+        pango_layout_set_font_description(layout_path, desc_path);
+        pango_layout_set_ellipsize(layout_path, PANGO_ELLIPSIZE_MIDDLE);
     }
 }
 
@@ -297,6 +309,10 @@ void free_pango_objects() {
         g_object_unref(layout_small);
         layout_small = NULL;
     }
+    if (layout_path) {
+        g_object_unref(layout_path);
+        layout_path = NULL;
+    }
     if (desc_normal) {
         pango_font_description_free(desc_normal);
         desc_normal = NULL;
@@ -312,6 +328,10 @@ void free_pango_objects() {
     if (desc_small) {
         pango_font_description_free(desc_small);
         desc_small = NULL;
+    }
+    if (desc_path) {
+        pango_font_description_free(desc_path);
+        desc_path = NULL;
     }
 }
 
@@ -787,18 +807,12 @@ void draw_path_bar(cairo_t *cr, int x, int y, int width, FileList *list) {
     
     char *display_path = get_display_path(full_path);
 
-    PangoLayout *temp_layout = pango_cairo_create_layout(cr);
-    PangoFontDescription *temp_desc = pango_font_description_from_string("Sans 11");
-    pango_layout_set_font_description(temp_layout, temp_desc);
-    pango_layout_set_ellipsize(temp_layout, PANGO_ELLIPSIZE_MIDDLE);
+    PangoLayout *path_layout = layout_path;
     cairo_set_source_rgb(cr, TEXT_R/255.0, TEXT_G/255.0, TEXT_B/255.0);
     
     cairo_move_to(cr, x + MARGIN, (PATH_HEIGHT / 2) - 5);
-    pango_layout_set_text(temp_layout, display_path ? display_path : "", -1);
-    pango_cairo_show_layout(cr, temp_layout);
-
-    pango_font_description_free(temp_desc);
-    g_object_unref(temp_layout);
+    pango_layout_set_text(path_layout, display_path ? display_path : "", -1);
+    pango_cairo_show_layout(cr, path_layout);
     free(display_path);
 }
 
@@ -1603,7 +1617,21 @@ int main() {
     int win_width = 800;
     int win_height = 600;
 
-    win = XCreateSimpleWindow(dpy, RootWindow(dpy, screen), 0, 0, win_width, win_height, 0, 0, 0xFFFFFFFF);
+    // Match the X11 window background to Cairo's first painted frame. This
+    // prevents a white flash while an Expose event is waiting to be redrawn.
+    Colormap colormap = DefaultColormap(dpy, screen);
+    XColor bg_color;
+    bg_color.red = (unsigned short)(BG_R * 65535 / 255);
+    bg_color.green = (unsigned short)(BG_G * 65535 / 255);
+    bg_color.blue = (unsigned short)(BG_B * 65535 / 255);
+    bg_color.flags = DoRed | DoGreen | DoBlue;
+    if (!XAllocColor(dpy, colormap, &bg_color)) {
+        bg_color.pixel = WhitePixel(dpy, screen);
+    }
+
+    win = XCreateSimpleWindow(dpy, RootWindow(dpy, screen), 0, 0,
+                               win_width, win_height, 0,
+                               BlackPixel(dpy, screen), bg_color.pixel);
     XStoreName(dpy, win, "File Manager");
     XSelectInput(dpy, win, ExposureMask | KeyPressMask | StructureNotifyMask);
     XMapWindow(dpy, win);
