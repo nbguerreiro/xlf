@@ -776,6 +776,9 @@ void load_directory(FileList *list, const char *path) {
             if (strcmp(ent->d_name, ".") == 0) {
                 continue;
             }
+            // Keep the real parent entry supplied by readdir(); it is added
+            // only for directories where the filesystem exposes it.
+
 
             char fullpath[4096];
             snprintf(fullpath, sizeof(fullpath), "%s/%s", path, ent->d_name);
@@ -799,20 +802,6 @@ void load_directory(FileList *list, const char *path) {
             }
         }
         closedir(dir);
-    }
-
-    // Add a parent-directory entry when there is a parent to navigate to.
-    if (strcmp(path, "/") != 0 && list->count < list->capacity) {
-        FileEntry *tmp = realloc(list->entries, (list->count + 1) * sizeof(FileEntry));
-        if (tmp) {
-            list->entries = tmp;
-            list->capacity = list->count + 1;
-            list->entries[list->count].name = strdup("..");
-            if (list->entries[list->count].name) {
-                list->entries[list->count].is_dir = 1;
-                list->count++;
-            }
-        }
     }
 
     if (list->entries && list->count > 0) {
@@ -1622,7 +1611,9 @@ void handle_mouse_button(XButtonEvent *ev, int win_width, int win_height) {
     if (row < 0 || row >= visible_items || index < 0 || index >= file_list.count) return;
 
     file_list.selected = index;
-    request_preview();
+    if (strcmp(file_list.entries[index].name, "..") != 0) {
+        request_preview();
+    }
 
     if (last_click_index == index && ev->time - last_click_time < 400) {
         char path[PATH_MAX];
@@ -1632,7 +1623,9 @@ void handle_mouse_button(XButtonEvent *ev, int win_width, int win_height) {
         if (n >= 0 && (size_t)n < sizeof(path)) {
             if (file_list.entries[index].is_dir) {
                 load_directory(&file_list, path);
-                request_preview();
+                if (strcmp(file_list.entries[file_list.selected].name, "..") != 0) {
+                    request_preview();
+                }
             } else {
                 open_file_with_xdg(path);
             }
@@ -1664,8 +1657,10 @@ void handle_key(XKeyEvent *ev) {
             if (file_list.count > 0 && file_list.entries[file_list.selected].is_dir) {
                 char new_path[4096];
                 snprintf(new_path, sizeof(new_path), "%s/%s", file_list.path, file_list.entries[file_list.selected].name);
-                load_directory(&file_list, new_path);
-                request_preview();
+                if (strcmp(file_list.entries[file_list.selected].name, "..") != 0) {
+                    load_directory(&file_list, new_path);
+                    request_preview();
+                }
             }
             break;
         case XK_h:
