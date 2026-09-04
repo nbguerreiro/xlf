@@ -34,11 +34,11 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y \
-  pkg-config \
-  libcairo2-dev \
-  libpango1.0-dev \
-  libgdk-pixbuf-2.0-dev \
-  libx11-dev
+            pkg-config \
+            libcairo2-dev \
+            libpango1.0-dev \
+            libgdk-pixbuf-2.0-dev \
+            libx11-dev
 
       - name: Build
         run: make clean all
@@ -66,11 +66,11 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y \
-  pkg-config \
-  libcairo2-dev \
-  libpango1.0-dev \
-  libgdk-pixbuf-2.0-dev \
-  libx11-dev
+            pkg-config \
+            libcairo2-dev \
+            libpango1.0-dev \
+            libgdk-pixbuf-2.0-dev \
+            libx11-dev
 
       - name: Build
         run: make clean all
@@ -88,11 +88,11 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y \
-  pkg-config \
-  libcairo2-dev \
-  libpango1.0-dev \
-  libgdk-pixbuf-2.0-dev \
-  libx11-dev             cppcheck             clang-tools
+            pkg-config \
+            libcairo2-dev \
+            libpango1.0-dev \
+            libgdk-pixbuf-2.0-dev \
+            libx11-dev             cppcheck             clang-tools
 
       - name: Build with Clang analyzer
         run: |
@@ -115,10 +115,10 @@ jobs:
       - name: cppcheck
         run: |
           cppcheck \
-  --enable=warning,style,performance,portability \
-  --error-exitcode=1 \
-  --inline-suppr \
-  fm.c
+            --enable=warning,style,performance,portability \
+            --error-exitcode=1 \
+            --inline-suppr \
+            fm.c
 
   test:
     name: Tests
@@ -130,11 +130,11 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y \
-  pkg-config \
-  libcairo2-dev \
-  libpango1.0-dev \
-  libgdk-pixbuf-2.0-dev \
-  libx11-dev
+            pkg-config \
+            libcairo2-dev \
+            libpango1.0-dev \
+            libgdk-pixbuf-2.0-dev \
+            libx11-dev
 
       - name: Run tests
         run: make test
@@ -150,11 +150,11 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y \
-  pkg-config \
-  libcairo2-dev \
-  libpango1.0-dev \
-  libgdk-pixbuf-2.0-dev \
-  libx11-dev
+            pkg-config \
+            libcairo2-dev \
+            libpango1.0-dev \
+            libgdk-pixbuf-2.0-dev \
+            libx11-dev
 
       - name: Build
         run: make clean all
