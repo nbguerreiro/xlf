@@ -1598,11 +1598,26 @@ int main() {
 
         if (!running) break;
 
+        int preview_applied = 0;
         if (preview_wake_pipe[0] >= 0) {
             char buffer[64];
-            while (read(preview_wake_pipe[0], buffer, sizeof(buffer)) > 0) {
+            ssize_t n;
+            while ((n = read(preview_wake_pipe[0], buffer, sizeof(buffer))) > 0) {
+                (void)n;
                 apply_preview_result();
+                preview_applied = 1;
             }
+        }
+
+        // The wake pipe may become readable between X event processing and
+        // select(). If we consume it here, redraw immediately instead of
+        // waiting for another X event (for example, a focus change).
+        if (preview_applied) {
+            Window root;
+            int x, y;
+            unsigned int width, height, border, depth;
+            XGetGeometry(dpy, win, &root, &x, &y, &width, &height, &border, &depth);
+            draw_ui(width, height);
         }
 
         fd_set readfds;
