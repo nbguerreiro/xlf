@@ -20,7 +20,7 @@
 4) Type detection and preview robustness (medium effort)
   - [x] Replace extension-only detection with libmagic or GFileInfo for mime detection. (effort: medium)
   - [x] Add graceful fallback if external tools (lynx, pdfinfo, mediainfo, mp3info) are missing (display message in preview). (effort: small)
-  - [ ] Sanitize and validate paths passed to exec/posix_spawn. (effort: small)
+  - [x] Sanitize and validate paths passed to exec/posix_spawn. (effort: small)
 
 5) Usability features (medium → large effort)
   - [ ] Add mouse support: click to select, double-click to open directory/file. (effort: medium)
