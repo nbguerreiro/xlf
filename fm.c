@@ -1617,7 +1617,21 @@ int main() {
     int win_width = 800;
     int win_height = 600;
 
-    win = XCreateSimpleWindow(dpy, RootWindow(dpy, screen), 0, 0, win_width, win_height, 0, 0, 0xFFFFFFFF);
+    // Match the X11 window background to Cairo's first painted frame. This
+    // prevents a white flash while an Expose event is waiting to be redrawn.
+    Colormap colormap = DefaultColormap(dpy, screen);
+    XColor bg_color;
+    bg_color.red = (unsigned short)(BG_R * 65535 / 255);
+    bg_color.green = (unsigned short)(BG_G * 65535 / 255);
+    bg_color.blue = (unsigned short)(BG_B * 65535 / 255);
+    bg_color.flags = DoRed | DoGreen | DoBlue;
+    if (!XAllocColor(dpy, colormap, &bg_color)) {
+        bg_color.pixel = WhitePixel(dpy, screen);
+    }
+
+    win = XCreateSimpleWindow(dpy, RootWindow(dpy, screen), 0, 0,
+                               win_width, win_height, 0,
+                               BlackPixel(dpy, screen), bg_color.pixel);
     XStoreName(dpy, win, "File Manager");
     XSelectInput(dpy, win, ExposureMask | KeyPressMask | StructureNotifyMask);
     XMapWindow(dpy, win);
