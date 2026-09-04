@@ -137,11 +137,18 @@ void init_file_list(FileList *list, const char *path) {
 
 void free_file_list(FileList *list) {
     if (!list) return;
-    for (int i = 0; i < list->count; i++) {
-        free(list->entries[i].name);
+    if (list->entries) {
+        for (int i = 0; i < list->count; i++) {
+            free(list->entries[i].name);
+        }
     }
     free(list->entries);
     free(list->path);
+    list->entries = NULL;
+    list->path = NULL;
+    list->count = 0;
+    list->capacity = 0;
+    list->selected = 0;
 }
 
 void free_preview_image() {
@@ -938,8 +945,7 @@ void draw_image(cairo_t *cr, int x, int y, int width, int height) {
             GdkPixbuf *with_alpha = gdk_pixbuf_add_alpha(scaled, FALSE, 0, 0, 0);
             g_object_unref(scaled);
             scaled = with_alpha;
-            s_n_channels = 4;
-        }
+            }
         
         guchar *pixels = gdk_pixbuf_get_pixels(scaled);
         int rowstride = gdk_pixbuf_get_rowstride(scaled);
@@ -1109,25 +1115,25 @@ void apply_preview_result() {
             preview_text_content = result.text;
             result.text = NULL;
             preview_is_text = (preview_text_content != NULL &&
-                               preview_text_content[0] != ' ');
+                               preview_text_content[0] != '\0');
             break;
         case PREVIEW_RESULT_HTML:
             preview_html_text = result.text;
             result.text = NULL;
             preview_is_html = (preview_html_text != NULL &&
-                               preview_html_text[0] != ' ');
+                               preview_html_text[0] != '\0');
             break;
         case PREVIEW_RESULT_PDF:
             preview_pdf_text = result.text;
             result.text = NULL;
             preview_is_pdf = (preview_pdf_text != NULL &&
-                              preview_pdf_text[0] != ' ');
+                              preview_pdf_text[0] != '\0');
             break;
         case PREVIEW_RESULT_MEDIA:
             preview_media_text = result.text;
             result.text = NULL;
             preview_is_media = (preview_media_text != NULL &&
-                                preview_media_text[0] != ' ');
+                                preview_media_text[0] != '\0');
             break;
         case PREVIEW_RESULT_NONE:
             break;
@@ -1162,7 +1168,7 @@ PreviewResult load_preview_result(const PreviewTask *task) {
         case PREVIEW_RESULT_TEXT:
             if (is_small_image(task->path, 1048576)) {
                 result.text = load_text_content(task->path, 1048576);
-                if (result.text && result.text[0] == ' ') {
+                if (result.text && result.text[0] == '\0') {
                     free(result.text);
                     result.text = NULL;
                 }
@@ -1171,7 +1177,7 @@ PreviewResult load_preview_result(const PreviewTask *task) {
 
         case PREVIEW_RESULT_HTML:
             result.text = load_html_preview(task->path);
-            if (result.text && result.text[0] == ' ') {
+            if (result.text && result.text[0] == '\0') {
                 free(result.text);
                 result.text = NULL;
             }
@@ -1180,7 +1186,7 @@ PreviewResult load_preview_result(const PreviewTask *task) {
         case PREVIEW_RESULT_PDF:
             if (is_small_image(task->path, 5 * 1048576)) {
                 result.text = load_pdf_preview(task->path);
-                if (result.text && result.text[0] == ' ') {
+                if (result.text && result.text[0] == '\0') {
                     free(result.text);
                     result.text = NULL;
                 }
@@ -1191,7 +1197,7 @@ PreviewResult load_preview_result(const PreviewTask *task) {
             result.text = is_mp3_file(task->path)
                 ? load_mp3_info(task->path)
                 : load_media_preview(task->path);
-            if (result.text && result.text[0] == ' ') {
+            if (result.text && result.text[0] == '\0') {
                 free(result.text);
                 result.text = NULL;
             }
