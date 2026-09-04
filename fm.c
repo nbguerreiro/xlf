@@ -202,14 +202,14 @@ void free_scaled_image_cache() {
 
 // Check if a tool is available in PATH
 int tool_is_available(const char *tool_name) {
-    char *path_env = getenv("PATH");
+    const char *path_env = getenv("PATH");
     if (!path_env) return 0;
 
     char *path_copy = strdup(path_env);
     if (!path_copy) return 0;
 
     int found = 0;
-    char *token = strtok(path_copy, ":");
+    const char *token = strtok(path_copy, ":");
     while (token) {
         char tool_path[4096];
         snprintf(tool_path, sizeof(tool_path), "%s/%s", token, tool_name);
@@ -514,7 +514,7 @@ char *load_text_content(const char *path, off_t max_size) {
     size_t n = fread(buffer, 1, fsize, f);
     fclose(f);
 
-    if (n <= 0) {
+    if (n == 0) {
         free(buffer);
         return NULL;
     }
@@ -565,7 +565,7 @@ char *get_absolute_path(const char *path) {
 char *get_display_path(const char *path) {
     char *abs_path = get_absolute_path(path);
     if (!abs_path) return NULL;
-    char *home = getenv("HOME");
+    const char *home = getenv("HOME");
     if (home) {
         size_t hlen = strlen(home);
         if (strncmp(abs_path, home, hlen) == 0 && (abs_path[hlen] == '/' || abs_path[hlen] == '\0')) {
@@ -619,7 +619,7 @@ void format_file_info(const char *path, const char *name, int is_dir, char *buf,
     }
 
     // Format date
-    struct tm *tm = localtime(&st.st_mtime);
+    const struct tm *tm = localtime(&st.st_mtime);
     char date_str[64];
     strftime(date_str, sizeof(date_str), "%a %b %d %H:%M:%S %Y", tm);
 
@@ -627,8 +627,8 @@ void format_file_info(const char *path, const char *name, int is_dir, char *buf,
 }
 
 int compare_entries(const void *a, const void *b) {
-    FileEntry *ea = (FileEntry *)a;
-    FileEntry *eb = (FileEntry *)b;
+    const FileEntry *ea = (const FileEntry *)a;
+    const FileEntry *eb = (const FileEntry *)b;
     // Directories first, then alphabetical
     if (ea->is_dir != eb->is_dir) {
         return eb->is_dir - ea->is_dir;
@@ -638,7 +638,7 @@ int compare_entries(const void *a, const void *b) {
 
 void load_directory(FileList *list, const char *path) {
     DIR *dir;
-    struct dirent *ent;
+    const struct dirent *ent;
     struct stat st;
 
     // Free old entries
@@ -735,7 +735,7 @@ void draw_path_bar(cairo_t *cr, int x, int y, int width, FileList *list) {
     free(display_path);
 }
 
-void draw_file_entries(cairo_t *cr, FileList *list, int x, int y, int width, int height) {
+void draw_file_entries(cairo_t *cr, const FileList *list, int x, int y, int width, int height) {
     cairo_set_source_rgb(cr, BG_R/255.0, BG_G/255.0, BG_B/255.0);
     cairo_rectangle(cr, x, y, width, height);
     cairo_fill(cr);
@@ -1427,7 +1427,7 @@ void handle_key(XKeyEvent *ev) {
                 // Already at root, do nothing
                 ;
             } else {
-                char *last_slash = strrchr(file_list.path, '/');
+                const char *last_slash = strrchr(file_list.path, '/');
                 char parent_path[4096];
                 if (last_slash && last_slash > file_list.path) {
                     // Remove everything after last slash
