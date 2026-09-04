@@ -1151,8 +1151,13 @@ void apply_preview_result() {
     preview_result_ready = 0;
     pthread_mutex_unlock(&preview_mutex);
 
+    // Snapshot the generation under the same mutex used by request_preview().
+    pthread_mutex_lock(&preview_mutex);
+    unsigned long current_generation = preview_generation;
+    pthread_mutex_unlock(&preview_mutex);
+
     // A newer selection may have superseded this result while the worker was busy.
-    if (result.generation != preview_generation) {
+    if (result.generation != current_generation) {
         free_preview_result(&result);
         return;
     }
@@ -1286,7 +1291,10 @@ void *preview_worker_main(void *unused) {
             break;
         }
 
+        // Transfer ownership of the path to the worker before releasing the lock.
+        // The main thread may replace preview_task while this work is in progress.
         task = preview_task;
+        preview_task.path = NULL;
         preview_task_pending = 0;
         pthread_mutex_unlock(&preview_mutex);
 
