@@ -13,7 +13,7 @@
   - [x] Ensure cairo_image_surface lifetime rules are followed when using image data (keep data until surface destroyed). (effort: small)
 
 3) Performance / UI responsiveness (medium → large effort)
-  - [ ] Make preview loading asynchronous so UI doesn't block (options: worker thread with mutex + main thread redraw; or non-blocking child processes integrated with event loop). (effort: large)
+  - [x] Make preview loading asynchronous so UI doesn't block (dedicated worker thread, generation-based stale-result suppression, and a wake pipe integrated with the X11 event loop). (effort: large)
   - [ ] Use double-buffering / reuse cairo surface (avoid creating/destroying cairo_xlib_surface every draw). (effort: medium)
   - [ ] Reduce per-frame allocations by reusing buffers and layouts. (effort: medium)
 
@@ -64,4 +64,4 @@ What I just implemented:
   - Users see helpful message instead of blank preview or silent failure
   - Result: improved UX with minimal overhead
 
-Progress: 12/33 items complete (36%)
+Progress: 13/33 items complete (39%)
