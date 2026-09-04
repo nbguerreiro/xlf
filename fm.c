@@ -109,7 +109,7 @@ int preview_wake_pipe[2] = {-1, -1};
 unsigned long preview_generation = 0;
 int preview_worker_started = 0;
 
-Time last_click_time = {0, 0};
+Time last_click_time = 0;
 int last_click_index = -1;
 
 // Reused Cairo surfaces for the window and off-screen frame buffer.
@@ -773,7 +773,7 @@ void load_directory(FileList *list, const char *path) {
 
     if ((dir = opendir(path)) != NULL) {
         while ((ent = readdir(dir)) != NULL) {
-            if (strcmp(ent->d_name, ".") == 0 || strcmp(ent->d_name, "..") == 0) {
+            if (strcmp(ent->d_name, ".") == 0) {
                 continue;
             }
 
@@ -799,6 +799,20 @@ void load_directory(FileList *list, const char *path) {
             }
         }
         closedir(dir);
+    }
+
+    // Add a parent-directory entry when there is a parent to navigate to.
+    if (strcmp(path, "/") != 0 && list->count < list->capacity) {
+        FileEntry *tmp = realloc(list->entries, (list->count + 1) * sizeof(FileEntry));
+        if (tmp) {
+            list->entries = tmp;
+            list->capacity = list->count + 1;
+            list->entries[list->count].name = strdup("..");
+            if (list->entries[list->count].name) {
+                list->entries[list->count].is_dir = 1;
+                list->count++;
+            }
+        }
     }
 
     if (list->entries && list->count > 0) {
