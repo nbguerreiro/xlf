@@ -12,6 +12,8 @@
 #include <limits.h>
 #include <time.h>
 #include <errno.h>
+#include <pthread.h>
+#include <sys/select.h>
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>
 #include <cairo-xlib.h>
@@ -67,6 +69,44 @@ char *preview_media_text;
 int preview_is_media;
 char *preview_text_content;
 int preview_is_text;
+
+// Preview loading runs on a dedicated worker so the X11 event loop stays responsive.
+typedef enum {
+    PREVIEW_RESULT_NONE,
+    PREVIEW_RESULT_DIR,
+    PREVIEW_RESULT_IMAGE,
+    PREVIEW_RESULT_TEXT,
+    PREVIEW_RESULT_HTML,
+    PREVIEW_RESULT_PDF,
+    PREVIEW_RESULT_MEDIA
+} PreviewResultKind;
+
+typedef struct {
+    unsigned long generation;
+    PreviewResultKind kind;
+    char *path;
+} PreviewTask;
+
+typedef struct {
+    unsigned long generation;
+    PreviewResultKind kind;
+    GdkPixbuf *image;
+    char *text;
+    FileList directory;
+    int has_directory;
+} PreviewResult;
+
+pthread_t preview_thread;
+pthread_mutex_t preview_mutex = PTHREAD_MUTEX_INITIALIZER;
+pthread_cond_t preview_cond = PTHREAD_COND_INITIALIZER;
+PreviewTask preview_task = {0, PREVIEW_RESULT_NONE, NULL};
+int preview_task_pending = 0;
+int preview_worker_stop = 0;
+PreviewResult preview_result = {0, PREVIEW_RESULT_NONE, NULL, NULL, {NULL, 0, 0, 0, NULL}, 0};
+int preview_result_ready = 0;
+int preview_wake_pipe[2] = {-1, -1};
+unsigned long preview_generation = 0;
+int preview_worker_started = 0;
 
 // Cached Pango objects (reused across frames)
 PangoLayout *layout_normal = NULL;
@@ -996,105 +1036,331 @@ void draw_image(cairo_t *cr, int x, int y, int width, int height) {
     g_object_unref(scaled);
 }
 
-void update_preview() {
+void clear_preview_state() {
     free_preview_image();
     free_preview_html();
     free_preview_pdf();
     free_preview_text();
     free_preview_media();
     free_scaled_image_cache();
-    preview_is_dir = 0;
-    
-    // Clear preview_list if the selected item is not a directory
-    if (file_list.count > 0 && file_list.selected >= 0 && file_list.selected < file_list.count) {
-        if (!file_list.entries[file_list.selected].is_dir) {
-            free_file_list(&preview_list);
-            init_file_list(&preview_list, ".");
-        }
-    } else {
+
+    if (preview_list.entries || preview_list.path) {
         free_file_list(&preview_list);
-        init_file_list(&preview_list, ".");
+    }
+    init_file_list(&preview_list, ".");
+    preview_is_dir = 0;
+}
+
+void free_preview_result(PreviewResult *result) {
+    if (!result) return;
+
+    if (result->image) {
+        g_object_unref(result->image);
+        result->image = NULL;
+    }
+    free(result->text);
+    result->text = NULL;
+
+    if (result->has_directory) {
+        free_file_list(&result->directory);
+        result->has_directory = 0;
     }
 
-    if (file_list.count > 0 && file_list.selected >= 0 && file_list.selected < file_list.count) {
-        if (file_list.entries[file_list.selected].is_dir) {
-            char preview_path[4096];
-            snprintf(preview_path, sizeof(preview_path), "%s/%s", file_list.path, file_list.entries[file_list.selected].name);
-            load_directory(&preview_list, preview_path);
+    result->generation = 0;
+    result->kind = PREVIEW_RESULT_NONE;
+}
+
+void apply_preview_result() {
+    PreviewResult result;
+
+    pthread_mutex_lock(&preview_mutex);
+    if (!preview_result_ready) {
+        pthread_mutex_unlock(&preview_mutex);
+        return;
+    }
+
+    result = preview_result;
+    preview_result = (PreviewResult){0, PREVIEW_RESULT_NONE, NULL, NULL,
+                                     {NULL, 0, 0, 0, NULL}, 0};
+    preview_result_ready = 0;
+    pthread_mutex_unlock(&preview_mutex);
+
+    // A newer selection may have superseded this result while the worker was busy.
+    if (result.generation != preview_generation) {
+        free_preview_result(&result);
+        return;
+    }
+
+    clear_preview_state();
+
+    switch (result.kind) {
+        case PREVIEW_RESULT_DIR:
+            preview_list = result.directory;
+            result.directory = (FileList){NULL, 0, 0, 0, NULL};
+            result.has_directory = 0;
             preview_is_dir = 1;
-        } else if (is_image_file(file_list.entries[file_list.selected].name)) {
-            char image_path[4096];
-            snprintf(image_path, sizeof(image_path), "%s/%s", file_list.path, file_list.entries[file_list.selected].name);
-            // Only preview images smaller than ~1MB (1048576 bytes)
-            if (is_small_image(image_path, 1048576)) {
+            break;
+        case PREVIEW_RESULT_IMAGE:
+            preview_image = result.image;
+            result.image = NULL;
+            preview_is_image = (preview_image != NULL);
+            break;
+        case PREVIEW_RESULT_TEXT:
+            preview_text_content = result.text;
+            result.text = NULL;
+            preview_is_text = (preview_text_content != NULL &&
+                               preview_text_content[0] != ' ');
+            break;
+        case PREVIEW_RESULT_HTML:
+            preview_html_text = result.text;
+            result.text = NULL;
+            preview_is_html = (preview_html_text != NULL &&
+                               preview_html_text[0] != ' ');
+            break;
+        case PREVIEW_RESULT_PDF:
+            preview_pdf_text = result.text;
+            result.text = NULL;
+            preview_is_pdf = (preview_pdf_text != NULL &&
+                              preview_pdf_text[0] != ' ');
+            break;
+        case PREVIEW_RESULT_MEDIA:
+            preview_media_text = result.text;
+            result.text = NULL;
+            preview_is_media = (preview_media_text != NULL &&
+                                preview_media_text[0] != ' ');
+            break;
+        case PREVIEW_RESULT_NONE:
+            break;
+    }
+
+    free_preview_result(&result);
+}
+
+PreviewResult load_preview_result(const PreviewTask *task) {
+    PreviewResult result = {
+        task->generation, task->kind, NULL, NULL,
+        {NULL, 0, 0, 0, NULL}, 0
+    };
+
+    if (!task->path) return result;
+
+    switch (task->kind) {
+        case PREVIEW_RESULT_DIR:
+            init_file_list(&result.directory, task->path);
+            load_directory(&result.directory, task->path);
+            result.has_directory = 1;
+            break;
+
+        case PREVIEW_RESULT_IMAGE:
+            if (is_small_image(task->path, 1048576)) {
                 GError *error = NULL;
-                preview_image = gdk_pixbuf_new_from_file(image_path, &error);
-                if (error) {
-                    g_error_free(error);
-                    preview_image = NULL;
-                }
-                if (preview_image) {
-                    preview_is_image = 1;
+                result.image = gdk_pixbuf_new_from_file(task->path, &error);
+                if (error) g_error_free(error);
+            }
+            break;
+
+        case PREVIEW_RESULT_TEXT:
+            if (is_small_image(task->path, 1048576)) {
+                result.text = load_text_content(task->path, 1048576);
+                if (result.text && result.text[0] == ' ') {
+                    free(result.text);
+                    result.text = NULL;
                 }
             }
-        } else if (is_text_file(file_list.entries[file_list.selected].name)) {
-            char text_path[4096];
-            snprintf(text_path, sizeof(text_path), "%s/%s", file_list.path, file_list.entries[file_list.selected].name);
-            // Only preview text files smaller than ~1MB
-            if (is_small_image(text_path, 1048576)) {
-                preview_text_content = load_text_content(text_path, 1048576);
-                if (preview_text_content && preview_text_content[0] != '\0') {
-                    preview_is_text = 1;
-                } else {
-                    free(preview_text_content);
-                    preview_text_content = NULL;
+            break;
+
+        case PREVIEW_RESULT_HTML:
+            result.text = load_html_preview(task->path);
+            if (result.text && result.text[0] == ' ') {
+                free(result.text);
+                result.text = NULL;
+            }
+            break;
+
+        case PREVIEW_RESULT_PDF:
+            if (is_small_image(task->path, 5 * 1048576)) {
+                result.text = load_pdf_preview(task->path);
+                if (result.text && result.text[0] == ' ') {
+                    free(result.text);
+                    result.text = NULL;
                 }
             }
-        } else if (is_mp3_file(file_list.entries[file_list.selected].name)) {
-            char media_path[4096];
-            snprintf(media_path, sizeof(media_path), "%s/%s", file_list.path, file_list.entries[file_list.selected].name);
-            preview_media_text = load_mp3_info(media_path);
-            if (preview_media_text && preview_media_text[0] != '\0') {
-                preview_is_media = 1;
+            break;
+
+        case PREVIEW_RESULT_MEDIA:
+            result.text = is_mp3_file(task->path)
+                ? load_mp3_info(task->path)
+                : load_media_preview(task->path);
+            if (result.text && result.text[0] == ' ') {
+                free(result.text);
+                result.text = NULL;
+            }
+            break;
+
+        case PREVIEW_RESULT_NONE:
+            break;
+    }
+
+    return result;
+}
+
+void *preview_worker_main(void *unused) {
+    (void)unused;
+
+    while (1) {
+        PreviewTask task;
+
+        pthread_mutex_lock(&preview_mutex);
+        while (!preview_task_pending && !preview_worker_stop) {
+            pthread_cond_wait(&preview_cond, &preview_mutex);
+        }
+
+        if (preview_worker_stop) {
+            pthread_mutex_unlock(&preview_mutex);
+            break;
+        }
+
+        task = preview_task;
+        preview_task_pending = 0;
+        pthread_mutex_unlock(&preview_mutex);
+
+        PreviewResult result = load_preview_result(&task);
+        free(task.path);
+
+        pthread_mutex_lock(&preview_mutex);
+
+        // Discard an older result if a newer preview request has already arrived.
+        if (result.generation != preview_generation) {
+            pthread_mutex_unlock(&preview_mutex);
+            free_preview_result(&result);
+            continue;
+        }
+
+        if (preview_result_ready) {
+            PreviewResult old_result = preview_result;
+            preview_result = (PreviewResult){0, PREVIEW_RESULT_NONE, NULL, NULL,
+                                             {NULL, 0, 0, 0, NULL}, 0};
+            preview_result_ready = 0;
+            pthread_mutex_unlock(&preview_mutex);
+            free_preview_result(&old_result);
+            pthread_mutex_lock(&preview_mutex);
+        }
+
+        preview_result = result;
+        preview_result_ready = 1;
+        pthread_mutex_unlock(&preview_mutex);
+
+        // Wake the main thread without touching Xlib from the worker.
+        if (preview_wake_pipe[1] >= 0) {
+            const char byte = 'p';
+            ssize_t written;
+            do {
+                written = write(preview_wake_pipe[1], &byte, 1);
+            } while (written < 0 && errno == EINTR);
+        }
+    }
+
+    return NULL;
+}
+
+int start_preview_worker() {
+    if (pipe(preview_wake_pipe) != 0) {
+        preview_wake_pipe[0] = -1;
+        preview_wake_pipe[1] = -1;
+        return 0;
+    }
+
+    int flags = fcntl(preview_wake_pipe[0], F_GETFL, 0);
+    if (flags >= 0) {
+        fcntl(preview_wake_pipe[0], F_SETFL, flags | O_NONBLOCK);
+    }
+
+    if (pthread_create(&preview_thread, NULL, preview_worker_main, NULL) != 0) {
+        close(preview_wake_pipe[0]);
+        close(preview_wake_pipe[1]);
+        preview_wake_pipe[0] = -1;
+        preview_wake_pipe[1] = -1;
+        return 0;
+    }
+
+    preview_worker_started = 1;
+    return 1;
+}
+
+void request_preview() {
+    PreviewTask task = {0, PREVIEW_RESULT_NONE, NULL};
+
+    pthread_mutex_lock(&preview_mutex);
+    preview_generation++;
+    task.generation = preview_generation;
+
+    if (file_list.count > 0 &&
+        file_list.selected >= 0 &&
+        file_list.selected < file_list.count) {
+        const FileEntry *entry = &file_list.entries[file_list.selected];
+        char path[4096];
+
+        snprintf(path, sizeof(path), "%s/%s", file_list.path, entry->name);
+        task.path = strdup(path);
+
+        if (task.path) {
+            if (entry->is_dir) {
+                task.kind = PREVIEW_RESULT_DIR;
+            } else if (is_image_file(entry->name)) {
+                task.kind = PREVIEW_RESULT_IMAGE;
+            } else if (is_text_file(entry->name)) {
+                task.kind = PREVIEW_RESULT_TEXT;
+            } else if (is_pdf_file(entry->name)) {
+                task.kind = PREVIEW_RESULT_PDF;
+            } else if (is_html_file(entry->name)) {
+                task.kind = PREVIEW_RESULT_HTML;
+            } else if (is_media_file(entry->name)) {
+                task.kind = PREVIEW_RESULT_MEDIA;
             } else {
-                free(preview_media_text);
-                preview_media_text = NULL;
-            }
-        } else if (is_pdf_file(file_list.entries[file_list.selected].name)) {
-            char pdf_path[4096];
-            snprintf(pdf_path, sizeof(pdf_path), "%s/%s", file_list.path, file_list.entries[file_list.selected].name);
-            // Only preview PDF files smaller than ~5MB
-            if (is_small_image(pdf_path, 5 * 1048576)) {
-                preview_pdf_text = load_pdf_preview(pdf_path);
-                if (preview_pdf_text && preview_pdf_text[0] != '\0') {
-                    preview_is_pdf = 1;
-                } else {
-                    free(preview_pdf_text);
-                    preview_pdf_text = NULL;
-                }
-            }
-        } else if (is_html_file(file_list.entries[file_list.selected].name)) {
-            char html_path[4096];
-            snprintf(html_path, sizeof(html_path), "%s/%s", file_list.path, file_list.entries[file_list.selected].name);
-            preview_html_text = load_html_preview(html_path);
-            if (preview_html_text && preview_html_text[0] != '\0') {
-                preview_is_html = 1;
-            } else {
-                free(preview_html_text);
-                preview_html_text = NULL;
-            }
-        } else if (is_media_file(file_list.entries[file_list.selected].name)) {
-            char media_path[4096];
-            snprintf(media_path, sizeof(media_path), "%s/%s", file_list.path, file_list.entries[file_list.selected].name);
-            preview_media_text = load_media_preview(media_path);
-            if (preview_media_text && preview_media_text[0] != '\0') {
-                preview_is_media = 1;
-            } else {
-                free(preview_media_text);
-                preview_media_text = NULL;
+                free(task.path);
+                task.path = NULL;
             }
         }
     }
+
+    free(preview_task.path);
+    preview_task = task;
+    preview_task_pending = (task.path != NULL);
+    pthread_cond_signal(&preview_cond);
+    pthread_mutex_unlock(&preview_mutex);
+
+    // Immediately clear stale preview content; the worker will fill it in later.
+    clear_preview_state();
+}
+
+void stop_preview_worker() {
+    pthread_mutex_lock(&preview_mutex);
+    preview_worker_stop = 1;
+    pthread_cond_signal(&preview_cond);
+    pthread_mutex_unlock(&preview_mutex);
+
+    if (preview_worker_started) {
+        pthread_join(preview_thread, NULL);
+        preview_worker_started = 0;
+    }
+
+    pthread_mutex_lock(&preview_mutex);
+    free(preview_task.path);
+    preview_task.path = NULL;
+    preview_task_pending = 0;
+
+    PreviewResult result = preview_result;
+    preview_result = (PreviewResult){0, PREVIEW_RESULT_NONE, NULL, NULL,
+                                     {NULL, 0, 0, 0, NULL}, 0};
+    preview_result_ready = 0;
+    pthread_mutex_unlock(&preview_mutex);
+
+    free_preview_result(&result);
+
+    if (preview_wake_pipe[0] >= 0) close(preview_wake_pipe[0]);
+    if (preview_wake_pipe[1] >= 0) close(preview_wake_pipe[1]);
+    preview_wake_pipe[0] = -1;
+    preview_wake_pipe[1] = -1;
 }
 
 void draw_ui(int win_width, int win_height) {
@@ -1130,13 +1396,13 @@ void handle_key(XKeyEvent *ev) {
         case XK_j:
             if (file_list.count > 0) {
                 file_list.selected = (file_list.selected + 1) % file_list.count;
-                update_preview();
+                request_preview();
             }
             break;
         case XK_k:
             if (file_list.count > 0) {
                 file_list.selected = (file_list.selected - 1 + file_list.count) % file_list.count;
-                update_preview();
+                request_preview();
             }
             break;
         case XK_l:
@@ -1144,7 +1410,7 @@ void handle_key(XKeyEvent *ev) {
                 char new_path[4096];
                 snprintf(new_path, sizeof(new_path), "%s/%s", file_list.path, file_list.entries[file_list.selected].name);
                 load_directory(&file_list, new_path);
-                update_preview();
+                request_preview();
             }
             break;
         case XK_h:
@@ -1169,7 +1435,7 @@ void handle_key(XKeyEvent *ev) {
                 }
                 load_directory(&file_list, parent_path);
             }
-            update_preview();
+            request_preview();
             break;
         case XK_q:
         case XK_Escape:
@@ -1199,49 +1465,101 @@ int main() {
     init_file_list(&preview_list, ".");
     preview_is_dir = 0;
 
-    // Check tool availability once at startup
+    // Check tool availability once at startup.
     check_tool_availability();
 
     Atom wm_delete_window = XInternAtom(dpy, "WM_DELETE_WINDOW", False);
     XSetWMProtocols(dpy, win, &wm_delete_window, 1);
 
-    update_preview();
+    if (!start_preview_worker()) {
+        fprintf(stderr, "Warning: could not start preview worker; previews disabled\n");
+    }
+
+    request_preview();
 
     int running = 1;
-    while (running) {
-        XEvent ev;
-        XNextEvent(dpy, &ev);
+    int x_fd = ConnectionNumber(dpy);
 
-        switch (ev.type) {
-            case Expose:
-                if (ev.xexpose.count == 0) {
-                    Window root;
-                    int x, y;
-                    unsigned int width, height, border, depth;
-                    XGetGeometry(dpy, win, &root, &x, &y, &width, &height, &border, &depth);
-                    draw_ui(width, height);
-                }
-                break;
-            case KeyPress:
-                handle_key(&ev.xkey);
-                {
-                    Window root;
-                    int x, y;
-                    unsigned int width, height, border, depth;
-                    XGetGeometry(dpy, win, &root, &x, &y, &width, &height, &border, &depth);
-                    draw_ui(width, height);
-                }
-                break;
-            case ClientMessage:
-                if (ev.xclient.data.l[0] == (long)wm_delete_window) {
-                    running = 0;
-                }
-                break;
-            case ConfigureNotify:
-                draw_ui(ev.xconfigure.width, ev.xconfigure.height);
-                break;
+    while (running) {
+        while (XPending(dpy) > 0) {
+            XEvent ev;
+            XNextEvent(dpy, &ev);
+
+            switch (ev.type) {
+                case Expose:
+                    if (ev.xexpose.count == 0) {
+                        Window root;
+                        int x, y;
+                        unsigned int width, height, border, depth;
+                        XGetGeometry(dpy, win, &root, &x, &y, &width, &height, &border, &depth);
+                        draw_ui(width, height);
+                    }
+                    break;
+
+                case KeyPress:
+                    handle_key(&ev.xkey);
+                    {
+                        Window root;
+                        int x, y;
+                        unsigned int width, height, border, depth;
+                        XGetGeometry(dpy, win, &root, &x, &y, &width, &height, &border, &depth);
+                        draw_ui(width, height);
+                    }
+                    break;
+
+                case ClientMessage:
+                    if (ev.xclient.data.l[0] == (long)wm_delete_window) {
+                        running = 0;
+                    }
+                    break;
+
+                case ConfigureNotify:
+                    draw_ui(ev.xconfigure.width, ev.xconfigure.height);
+                    break;
+            }
+
+            if (!running) break;
+        }
+
+        if (!running) break;
+
+        if (preview_wake_pipe[0] >= 0) {
+            char buffer[64];
+            while (read(preview_wake_pipe[0], buffer, sizeof(buffer)) > 0) {
+                apply_preview_result();
+            }
+        }
+
+        fd_set readfds;
+        FD_ZERO(&readfds);
+        FD_SET(x_fd, &readfds);
+        int max_fd = x_fd;
+
+        if (preview_wake_pipe[0] >= 0) {
+            FD_SET(preview_wake_pipe[0], &readfds);
+            if (preview_wake_pipe[0] > max_fd) max_fd = preview_wake_pipe[0];
+        }
+
+        if (select(max_fd + 1, &readfds, NULL, NULL, NULL) < 0) {
+            if (errno == EINTR) continue;
+            break;
+        }
+
+        if (preview_wake_pipe[0] >= 0 && FD_ISSET(preview_wake_pipe[0], &readfds)) {
+            char buffer[64];
+            while (read(preview_wake_pipe[0], buffer, sizeof(buffer)) > 0) {
+                apply_preview_result();
+            }
+
+            Window root;
+            int x, y;
+            unsigned int width, height, border, depth;
+            XGetGeometry(dpy, win, &root, &x, &y, &width, &height, &border, &depth);
+            draw_ui(width, height);
         }
     }
+
+    stop_preview_worker();
 
     free_file_list(&file_list);
     free_file_list(&preview_list);
