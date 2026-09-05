@@ -1708,7 +1708,7 @@ static int remove_tree(const char *path) {
     DIR *dir = opendir(path);
     if (!dir) return -1;
 
-    struct dirent *de;
+    const struct dirent *de;
     int result = 0;
     while ((de = readdir(dir)) != NULL) {
         if (strcmp(de->d_name, ".") == 0 || strcmp(de->d_name, "..") == 0)
