@@ -146,6 +146,7 @@ int tool_lynx_available = 0;
 int tool_pdfinfo_available = 0;
 int tool_mediainfo_available = 0;
 int tool_mp3info_available = 0;
+char status_message[256] = "";
 
 void init_file_list(FileList *list, const char *path) {
     list->entries = NULL;
@@ -908,6 +909,14 @@ void draw_file_entries(cairo_t *cr, const FileList *list, int x, int y, int widt
     }
 }
 
+static void set_status(const char *message) {
+    if (!message) {
+        status_message[0] = '\0';
+        return;
+    }
+    snprintf(status_message, sizeof(status_message), "%s", message);
+}
+
 void draw_file_list(cairo_t *cr, FileList *list, int x, int y, int width, int height) {
     // Draw search/rename feedback in the path bar.
     if (rename_active) {
@@ -1258,6 +1267,21 @@ void apply_preview_result() {
     }
 
     clear_preview_state();
+
+    if (result.kind != PREVIEW_RESULT_NONE && result.kind != PREVIEW_RESULT_DIR &&
+        !result.image && !result.text) {
+        set_status("Preview could not be loaded.");
+    } else if (result.text && strncmp(result.text, "Tool '", 6) == 0) {
+        const char *end = strchr(result.text, '\n');
+        char message[256];
+        size_t len = end ? (size_t)(end - result.text) : strlen(result.text);
+        if (len >= sizeof(message)) len = sizeof(message) - 1;
+        memcpy(message, result.text, len);
+        message[len] = '\0';
+        set_status(message);
+    } else {
+        set_status("");
+    }
 
     switch (result.kind) {
         case PREVIEW_RESULT_DIR:
@@ -1615,6 +1639,15 @@ void draw_ui(int win_width, int win_height) {
 
     draw_file_list(cr, &file_list, 0, 0, left_width, win_height);
     draw_preview(cr, left_width, 0, right_width, win_height);
+
+    if (status_message[0] != '\0') {
+        cairo_set_source_rgb(cr, BG_R/255.0, BG_G/255.0, BG_B/255.0);
+        cairo_rectangle(cr, 0, win_height - INFO_HEIGHT, win_width, INFO_HEIGHT);
+        cairo_fill(cr);
+        cairo_set_source_rgb(cr, TEXT_R/255.0, TEXT_G/255.0, TEXT_B/255.0);
+        draw_text(cr, status_message, MARGIN, win_height - INFO_HEIGHT + 5,
+                  win_width - 2 * MARGIN, layout_small);
+    }
 
     cairo_set_source_rgb(cr, 150/255.0, 150/255.0, 150/255.0);
     cairo_set_line_width(cr, 1.0);
