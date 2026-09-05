@@ -481,7 +481,7 @@ void handle_key(XKeyEvent *ev) {
             break;
         case XK_k:
             if (file_list.count > 0) {
-                int next = next_search_match(file_list.selected, -1);
+                int next = ui_next_search_match(file_list.selected, -1);
                 if (next >= 0) {
                     file_list.selected = next;
                     request_preview();
