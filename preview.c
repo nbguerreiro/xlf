@@ -34,12 +34,24 @@ extern char *load_media_preview(const char *path);
 extern void load_directory(FileList *list, const char *path);
 extern void init_file_list(FileList *list, const char *path);
 extern void clear_preview_state(void);
-extern int ENABLE_PREVIEW_IMAGE;
-extern int ENABLE_PREVIEW_TEXT;
-extern int ENABLE_PREVIEW_HTML;
-extern int ENABLE_PREVIEW_PDF;
-extern int ENABLE_PREVIEW_MP3;
-extern int ENABLE_PREVIEW_MEDIA;
+#ifndef ENABLE_PREVIEW_IMAGE
+#define ENABLE_PREVIEW_IMAGE 1
+#endif
+#ifndef ENABLE_PREVIEW_TEXT
+#define ENABLE_PREVIEW_TEXT 1
+#endif
+#ifndef ENABLE_PREVIEW_HTML
+#define ENABLE_PREVIEW_HTML 1
+#endif
+#ifndef ENABLE_PREVIEW_PDF
+#define ENABLE_PREVIEW_PDF 1
+#endif
+#ifndef ENABLE_PREVIEW_MP3
+#define ENABLE_PREVIEW_MP3 1
+#endif
+#ifndef ENABLE_PREVIEW_MEDIA
+#define ENABLE_PREVIEW_MEDIA 1
+#endif
 extern int tool_lynx_available;
 extern int tool_pdfinfo_available;
 extern int tool_mediainfo_available;
