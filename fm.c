@@ -1697,6 +1697,92 @@ void draw_ui(int win_width, int win_height) {
         cairo_destroy(window_cr);
     }
 }
+static int remove_tree(const char *path) {
+    struct stat st;
+    if (lstat(path, &st) != 0) return -1;
+
+    if (!S_ISDIR(st.st_mode) || S_ISLNK(st.st_mode)) {
+        return unlink(path);
+    }
+
+    DIR *dir = opendir(path);
+    if (!dir) return -1;
+
+    struct dirent *de;
+    int result = 0;
+    while ((de = readdir(dir)) != NULL) {
+        if (strcmp(de->d_name, ".") == 0 || strcmp(de->d_name, "..") == 0)
+            continue;
+
+        char child[PATH_MAX];
+        int n = snprintf(child, sizeof(child), "%s/%s", path, de->d_name);
+        if (n < 0 || (size_t)n >= sizeof(child) || remove_tree(child) != 0) {
+            result = -1;
+            break;
+        }
+    }
+    closedir(dir);
+
+    if (result == 0 && rmdir(path) != 0)
+        result = -1;
+    return result;
+}
+
+static int run_trash_command(const char *path) {
+    pid_t pid = fork();
+    if (pid < 0) return -1;
+    if (pid == 0) {
+        execlp("trash", "trash", path, (char *)NULL);
+        _exit(127);
+    }
+
+    int status;
+    while (waitpid(pid, &status, 0) < 0) {
+        if (errno != EINTR) return -1;
+    }
+    return WIFEXITED(status) && WEXITSTATUS(status) == 0 ? 0 : -1;
+}
+
+static void delete_selected_file(void) {
+    if (file_list.count <= 0) return;
+
+    const FileEntry *entry = &file_list.entries[file_list.selected];
+    if (strcmp(entry->name, "..") == 0) return;
+
+    char path[PATH_MAX];
+    int n = snprintf(path, sizeof(path), "%s/%s", file_list.path, entry->name);
+    if (n < 0 || (size_t)n >= sizeof(path)) return;
+
+    int old_selected = file_list.selected;
+    if (remove_tree(path) == 0) {
+        load_directory(&file_list, file_list.path);
+        if (file_list.count > 0) {
+            file_list.selected = old_selected < file_list.count ? old_selected : file_list.count - 1;
+        }
+        request_preview();
+    }
+}
+
+static void trash_selected_file(void) {
+    if (file_list.count <= 0) return;
+
+    const FileEntry *entry = &file_list.entries[file_list.selected];
+    if (strcmp(entry->name, "..") == 0) return;
+
+    char path[PATH_MAX];
+    int n = snprintf(path, sizeof(path), "%s/%s", file_list.path, entry->name);
+    if (n < 0 || (size_t)n >= sizeof(path)) return;
+
+    int old_selected = file_list.selected;
+    if (run_trash_command(path) == 0) {
+        load_directory(&file_list, file_list.path);
+        if (file_list.count > 0) {
+            file_list.selected = old_selected < file_list.count ? old_selected : file_list.count - 1;
+        }
+        request_preview();
+    }
+}
+
 static void open_file_with_xdg(const char *path) {
     pid_t pid = fork();
     if (pid < 0) return;
@@ -1931,6 +2017,12 @@ void handle_key(XKeyEvent *ev) {
             break;
         case XK_r:
             begin_rename();
+            break;
+        case XK_Delete:
+            delete_selected_file();
+            break;
+        case XK_BackSpace:
+            trash_selected_file();
             break;
         case XK_j:
             if (file_list.count > 0) {
