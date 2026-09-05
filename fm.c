@@ -1744,11 +1744,14 @@ static int run_trash_command(const char *path) {
 }
 
 static void refresh_after_file_change(int old_selected) {
-    // Invalidate and clear the old preview before replacing file_list.entries.
-    // This keeps the redraw from briefly mixing the old preview state with
-    // the newly allocated directory listing.
+    // load_directory() frees list->path, so do not pass file_list.path
+    // directly to it: make a private copy first.
+    char current_path[PATH_MAX];
+    snprintf(current_path, sizeof(current_path), "%s",
+             file_list.path ? file_list.path : ".");
+
     clear_preview_state();
-    load_directory(&file_list, file_list.path);
+    load_directory(&file_list, current_path);
     if (file_list.count > 0) {
         file_list.selected = old_selected < file_list.count
             ? old_selected : file_list.count - 1;
@@ -1786,11 +1789,7 @@ static void trash_selected_file(void) {
 
     int old_selected = file_list.selected;
     if (run_trash_command(path) == 0) {
-        load_directory(&file_list, file_list.path);
-        if (file_list.count > 0) {
-            file_list.selected = old_selected < file_list.count ? old_selected : file_list.count - 1;
-        }
-        request_preview();
+        refresh_after_file_change(old_selected);
     }
 }
 
