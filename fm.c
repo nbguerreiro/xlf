@@ -1754,7 +1754,7 @@ void handle_mouse_button(const XButtonEvent *ev, int win_width, int win_height) 
 
 static void begin_rename(void) {
     if (file_list.count <= 0) return;
-    FileEntry *entry = &file_list.entries[file_list.selected];
+    const FileEntry *entry = &file_list.entries[file_list.selected];
     if (strcmp(entry->name, "..") == 0) return;
 
     rename_active = 1;
@@ -1769,7 +1769,7 @@ static void finish_rename(int accept) {
     rename_active = 0;
     if (!accept || rename_query_len == 0) return;
 
-    FileEntry *entry = &file_list.entries[file_list.selected];
+    const FileEntry *entry = &file_list.entries[file_list.selected];
     if (strcmp(entry->name, rename_query) == 0) return;
 
     for (const unsigned char *p = (const unsigned char *)rename_query; *p; ++p) {
@@ -1838,7 +1838,7 @@ static void handle_rename_key(XKeyEvent *ev, KeySym ks) {
 static void open_selected_file(void) {
     if (file_list.count <= 0) return;
 
-    FileEntry *entry = &file_list.entries[file_list.selected];
+    const FileEntry *entry = &file_list.entries[file_list.selected];
     if (entry->is_dir || strcmp(entry->name, "..") == 0) return;
 
     char path[PATH_MAX];
@@ -1952,7 +1952,7 @@ void handle_key(XKeyEvent *ev) {
             break;
         case XK_l:
             if (file_list.count > 0) {
-                FileEntry *entry = &file_list.entries[file_list.selected];
+                const FileEntry *entry = &file_list.entries[file_list.selected];
 
                 if (entry->is_dir) {
                     char new_path[PATH_MAX];
