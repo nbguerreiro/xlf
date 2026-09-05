@@ -25,7 +25,7 @@
 5) Usability features (medium → large effort)
   - [x] Add mouse support: click to select, double-click to open directory/file. (effort: medium)
   - [x] Add more keyboard operations: o to open files, / to search, r to rename, Del to permanently delete, Backspace to send files/folders to trash via the external `trash` command. (effort: medium)
-  - [ ] Add status bar notifications for missing tools and preview errors. (effort: small)
+  - [x] Add status bar notifications for missing tools and preview errors. (effort: small)
 
 6) Security & portability (small → medium effort)
   - [ ] Avoid shell where possible (keep execlp/posix_spawn usage and ensure no shell expansion). (effort: small)
