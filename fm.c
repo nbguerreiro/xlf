@@ -34,6 +34,26 @@
 #define INFO_HEIGHT 28
 #define PATH_HEIGHT 28
 
+#ifndef ENABLE_PREVIEW_IMAGE
+#define ENABLE_PREVIEW_IMAGE 1
+#endif
+#ifndef ENABLE_PREVIEW_TEXT
+#define ENABLE_PREVIEW_TEXT 1
+#endif
+#ifndef ENABLE_PREVIEW_HTML
+#define ENABLE_PREVIEW_HTML 1
+#endif
+#ifndef ENABLE_PREVIEW_PDF
+#define ENABLE_PREVIEW_PDF 1
+#endif
+#ifndef ENABLE_PREVIEW_MP3
+#define ENABLE_PREVIEW_MP3 1
+#endif
+#ifndef ENABLE_PREVIEW_MEDIA
+#define ENABLE_PREVIEW_MEDIA 1
+#endif
+
+
 typedef struct {
     char *name;
     int is_dir;
@@ -396,14 +416,21 @@ FileType detect_file_type_mime(const char *path) {
 
 FileType detect_file_type(const char *path, const char *filename) {
     FileType type = detect_file_type_mime(path);
+
+    if (type == FILE_TYPE_IMAGE && !ENABLE_PREVIEW_IMAGE) return FILE_TYPE_UNKNOWN;
+    if (type == FILE_TYPE_TEXT && !ENABLE_PREVIEW_TEXT) return FILE_TYPE_UNKNOWN;
+    if (type == FILE_TYPE_HTML && !ENABLE_PREVIEW_HTML) return FILE_TYPE_UNKNOWN;
+    if (type == FILE_TYPE_PDF && !ENABLE_PREVIEW_PDF) return FILE_TYPE_UNKNOWN;
+    if (type == FILE_TYPE_MP3 && !ENABLE_PREVIEW_MP3) return FILE_TYPE_UNKNOWN;
+    if (type == FILE_TYPE_MEDIA && !ENABLE_PREVIEW_MEDIA) return FILE_TYPE_UNKNOWN;
     if (type != FILE_TYPE_UNKNOWN) return type;
 
-    if (is_image_file(filename)) return FILE_TYPE_IMAGE;
-    if (is_text_file(filename)) return FILE_TYPE_TEXT;
-    if (is_html_file(filename)) return FILE_TYPE_HTML;
-    if (is_pdf_file(filename)) return FILE_TYPE_PDF;
-    if (is_mp3_file(filename)) return FILE_TYPE_MP3;
-    if (is_media_file(filename)) return FILE_TYPE_MEDIA;
+    if (ENABLE_PREVIEW_IMAGE && is_image_file(filename)) return FILE_TYPE_IMAGE;
+    if (ENABLE_PREVIEW_TEXT && is_text_file(filename)) return FILE_TYPE_TEXT;
+    if (ENABLE_PREVIEW_HTML && is_html_file(filename)) return FILE_TYPE_HTML;
+    if (ENABLE_PREVIEW_PDF && is_pdf_file(filename)) return FILE_TYPE_PDF;
+    if (ENABLE_PREVIEW_MP3 && is_mp3_file(filename)) return FILE_TYPE_MP3;
+    if (ENABLE_PREVIEW_MEDIA && is_media_file(filename)) return FILE_TYPE_MEDIA;
     return FILE_TYPE_UNKNOWN;
 }
 
