@@ -29,7 +29,7 @@
 
 6) Security & portability (small → medium effort)
   - [x] Avoid shell where possible (keep execlp/posix_spawn usage and ensure no shell expansion). (effort: small)
-  - [ ] Document runtime dependencies in README. (effort: small)
+  - [x] Document runtime dependencies in README. (effort: small)
 
 7) Project & build hygiene (small effort)
   - [x] Add a Makefile with pkg-config for dependencies and sensible CFLAGS (e.g., -std=c11 -Wall -Wextra). (effort: small)
