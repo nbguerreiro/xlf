@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include "filelist.h"
 #include "util.h"
+#include "preview.h"
 #include <stdlib.h>
 #include <string.h>
 #include <strings.h>
@@ -55,12 +56,6 @@
 #define ENABLE_PREVIEW_MEDIA 1
 #endif
 
-
-typedef struct {
-    GdkPixbuf *pixbuf;
-    int width;
-    int height;
-} ScaledImageCache;
 
 Display *dpy;
 Window win;
