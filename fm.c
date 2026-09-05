@@ -1686,12 +1686,20 @@ void handle_key(XKeyEvent *ev) {
             }
             break;
         case XK_l:
-            if (file_list.count > 0 && file_list.entries[file_list.selected].is_dir) {
-                char new_path[4096];
-                snprintf(new_path, sizeof(new_path), "%s/%s", file_list.path, file_list.entries[file_list.selected].name);
-                if (strcmp(file_list.entries[file_list.selected].name, "..") != 0) {
-                    load_directory(&file_list, new_path);
-                    request_preview();
+            if (file_list.count > 0) {
+                FileEntry *entry = &file_list.entries[file_list.selected];
+
+                if (entry->is_dir) {
+                    char new_path[PATH_MAX];
+                    int n = snprintf(new_path, sizeof(new_path), "%s/%s",
+                                     file_list.path, entry->name);
+                    if (n >= 0 && (size_t)n < sizeof(new_path) &&
+                        strcmp(entry->name, "..") != 0) {
+                        load_directory(&file_list, new_path);
+                        request_preview();
+                    }
+                } else {
+                    open_selected_file();
                 }
             }
             break;
