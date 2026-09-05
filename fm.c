@@ -1517,7 +1517,7 @@ void request_preview() {
     if (file_list.count > 0 &&
         file_list.selected >= 0 &&
         file_list.selected < file_list.count) {
-        const const FileEntry *entry = &file_list.entries[file_list.selected];
+        const FileEntry *entry = &file_list.entries[file_list.selected];
         char path[4096];
 
         // ".." is a navigation entry, not a previewable directory. Keep the
@@ -1743,6 +1743,21 @@ static int run_trash_command(const char *path) {
     return WIFEXITED(status) && WEXITSTATUS(status) == 0 ? 0 : -1;
 }
 
+static void refresh_after_file_change(int old_selected) {
+    // Invalidate and clear the old preview before replacing file_list.entries.
+    // This keeps the redraw from briefly mixing the old preview state with
+    // the newly allocated directory listing.
+    clear_preview_state();
+    load_directory(&file_list, file_list.path);
+    if (file_list.count > 0) {
+        file_list.selected = old_selected < file_list.count
+            ? old_selected : file_list.count - 1;
+    } else {
+        file_list.selected = 0;
+    }
+    request_preview();
+}
+
 static void delete_selected_file(void) {
     if (file_list.count <= 0) return;
 
@@ -1755,11 +1770,7 @@ static void delete_selected_file(void) {
 
     int old_selected = file_list.selected;
     if (remove_tree(path) == 0) {
-        load_directory(&file_list, file_list.path);
-        if (file_list.count > 0) {
-            file_list.selected = old_selected < file_list.count ? old_selected : file_list.count - 1;
-        }
-        request_preview();
+        refresh_after_file_change(old_selected);
     }
 }
 
