@@ -487,10 +487,15 @@ extern PangoLayout *layout_normal;
 extern PangoLayout *layout_mono;
 extern int layout_small;
 extern void format_file_info(const char *path, const char *name, int is_dir, char *out, size_t out_size);
-extern int INFO_HEIGHT;
-extern int LINE_HEIGHT;
-extern int MARGIN;
-extern int BG_R, BG_G, BG_B, TEXT_R, TEXT_G, TEXT_B;
+#define MARGIN 10
+#define LINE_HEIGHT 24
+#define INFO_HEIGHT 28
+#define BG_R 223
+#define BG_G 191
+#define BG_B 191
+#define TEXT_R 0
+#define TEXT_G 0
+#define TEXT_B 0
 extern void draw_text_preview(cairo_t *cr, int x, int y, int width, int height, const char *text);
 extern void draw_pdf_preview(cairo_t *cr, int x, int y, int width, int height);
 extern void draw_text_content_preview(cairo_t *cr, int x, int y, int width, int height);
