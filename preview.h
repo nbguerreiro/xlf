@@ -32,9 +32,25 @@ void free_preview_text(void);
 void free_preview_media(void);
 void free_scaled_image_cache(void);
 void clear_preview_state(void);
-typedef struct PreviewResult {
+typedef enum {
+    PREVIEW_RESULT_NONE,
+    PREVIEW_RESULT_DIR,
+    PREVIEW_RESULT_IMAGE,
+    PREVIEW_RESULT_TEXT,
+    PREVIEW_RESULT_HTML,
+    PREVIEW_RESULT_PDF,
+    PREVIEW_RESULT_MEDIA
+} PreviewResultKind;
+
+typedef struct {
     unsigned long generation;
-    int kind;
+    PreviewResultKind kind;
+    char *path;
+} PreviewTask;
+
+typedef struct {
+    unsigned long generation;
+    PreviewResultKind kind;
     GdkPixbuf *image;
     char *text;
     FileList directory;
