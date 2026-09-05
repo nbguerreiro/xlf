@@ -7,6 +7,7 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <errno.h>
+#define _POSIX_C_SOURCE 200809L
 #include <sys/types.h>
 extern FileList file_list;
 extern pthread_t preview_thread;
@@ -21,7 +22,6 @@ extern int preview_wake_pipe[2];
 extern unsigned long preview_generation;
 extern int preview_worker_started;
 
-extern FileType detect_file_type(const char *path, const char *filename);
 extern int is_small_image(const char *path, off_t max_size);
 extern char *load_text_content(const char *path, size_t max_size);
 extern char *load_html_preview(const char *path);
