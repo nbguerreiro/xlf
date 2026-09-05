@@ -32,7 +32,14 @@ void free_preview_text(void);
 void free_preview_media(void);
 void free_scaled_image_cache(void);
 void clear_preview_state(void);
-typedef struct PreviewResult PreviewResult;
+typedef struct PreviewResult {
+    unsigned long generation;
+    int kind;
+    GdkPixbuf *image;
+    char *text;
+    FileList directory;
+    int has_directory;
+} PreviewResult;
 void free_preview_result(PreviewResult *result);
 void apply_preview_result(void);
 void draw_preview(cairo_t *cr, int x, int y, int width, int height);
