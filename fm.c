@@ -684,7 +684,7 @@ void draw_file_entries(cairo_t *cr, const FileList *list, int x, int y, int widt
     }
 }
 
-static void set_status(const char *message) {
+void set_status(const char *message) {
     if (!message) {
         status_message[0] = '\0';
         return;
