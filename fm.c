@@ -1751,6 +1751,14 @@ void handle_key(XKeyEvent *ev) {
     KeySym ks = XLookupKeysym(ev, 0);
 
     if (search_active) {
+        if (ks == XK_Up || ks == XK_Down) {
+            int next = next_search_match(file_list.selected, ks == XK_Down ? 1 : -1);
+            if (next >= 0) {
+                file_list.selected = next;
+                request_preview();
+            }
+            return;
+        }
         handle_search_key(ev, ks);
         return;
     }
