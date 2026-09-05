@@ -2,13 +2,6 @@ CC ?= gcc
 PKG_CFLAGS := $(shell pkg-config --cflags cairo pangocairo pango gdk-pixbuf-2.0 gio-2.0 x11)
 PKG_LIBS := $(shell pkg-config --libs cairo pangocairo pango gdk-pixbuf-2.0 gio-2.0 x11)
 CFLAGS ?= -std=c11 -O2 -Wall -Wextra
-PREVIEW_IMAGE ?= 1
-PREVIEW_TEXT ?= 1
-PREVIEW_HTML ?= 1
-PREVIEW_PDF ?= 1
-PREVIEW_MP3 ?= 1
-PREVIEW_MEDIA ?= 1
-CFLAGS += -DENABLE_PREVIEW_IMAGE=$(PREVIEW_IMAGE) -DENABLE_PREVIEW_TEXT=$(PREVIEW_TEXT) -DENABLE_PREVIEW_HTML=$(PREVIEW_HTML) -DENABLE_PREVIEW_PDF=$(PREVIEW_PDF) -DENABLE_PREVIEW_MP3=$(PREVIEW_MP3) -DENABLE_PREVIEW_MEDIA=$(PREVIEW_MEDIA)
 CFLAGS += $(PKG_CFLAGS)
 LDFLAGS ?=
 LDFLAGS += $(PKG_LIBS) -pthread
@@ -45,5 +38,4 @@ deps:
 	@echo "Required system packages:"
 	@echo "  - pkg-config"
 	@echo "  - development headers: cairo, pangocairo, pango, gdk-pixbuf-2.0, libX11"
-	@echo "  - optional preview tools: lynx, poppler-utils (pdfinfo), mediainfo, mp3info
-	@echo "Preview build flags: PREVIEW_IMAGE PREVIEW_TEXT PREVIEW_HTML PREVIEW_PDF PREVIEW_MP3 PREVIEW_MEDIA (default 1)""
+	@echo "  - optional preview tools: lynx, poppler-utils (pdfinfo), mediainfo, mp3info"
