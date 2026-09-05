@@ -441,7 +441,7 @@ void handle_key(XKeyEvent *ev) {
 
     if (search_active) {
         if (ks == XK_Up || ks == XK_Down) {
-            int next = next_search_match(file_list.selected, ks == XK_Down ? 1 : -1);
+            int next = ui_next_search_match(file_list.selected, ks == XK_Down ? 1 : -1);
             if (next >= 0) {
                 file_list.selected = next;
                 request_preview();
