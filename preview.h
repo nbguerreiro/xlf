@@ -59,5 +59,10 @@ typedef struct {
 void free_preview_result(PreviewResult *result);
 void apply_preview_result(void);
 void draw_preview(cairo_t *cr, int x, int y, int width, int height);
+PreviewResult load_preview_result(const PreviewTask *task);
+void *preview_worker_main(void *unused);
+int start_preview_worker(void);
+void request_preview(void);
+void stop_preview_worker(void);
 
 #endif
