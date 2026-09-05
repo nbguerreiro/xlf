@@ -1723,7 +1723,9 @@ static void finish_rename(int accept) {
 
     if (rename(old_path, new_path) == 0) {
         load_directory(&file_list, file_list.path);
-        request_preview();
+        if (file_list.count > 0) {
+            request_preview();
+        }
     }
 }
 
@@ -1829,7 +1831,6 @@ void handle_key(XKeyEvent *ev) {
 
     if (rename_active) {
         handle_rename_key(ev, ks);
-        draw_ui(800, 600);
         return;
     }
 
