@@ -129,55 +129,6 @@ int tool_mediainfo_available = 0;
 int tool_mp3info_available = 0;
 char status_message[256] = "";
 
-void free_preview_image() {
-    if (preview_image) {
-        g_object_unref(preview_image);
-        preview_image = NULL;
-    }
-    preview_is_image = 0;
-}
-
-void free_preview_html() {
-    if (preview_html_text) {
-        free(preview_html_text);
-        preview_html_text = NULL;
-    }
-    preview_is_html = 0;
-}
-
-void free_preview_pdf() {
-    if (preview_pdf_text) {
-        free(preview_pdf_text);
-        preview_pdf_text = NULL;
-    }
-    preview_is_pdf = 0;
-}
-
-void free_preview_text() {
-    if (preview_text_content) {
-        free(preview_text_content);
-        preview_text_content = NULL;
-    }
-    preview_is_text = 0;
-}
-
-void free_preview_media() {
-    if (preview_media_text) {
-        free(preview_media_text);
-        preview_media_text = NULL;
-    }
-    preview_is_media = 0;
-}
-
-void free_scaled_image_cache() {
-    if (scaled_image_cache.pixbuf) {
-        g_object_unref(scaled_image_cache.pixbuf);
-        scaled_image_cache.pixbuf = NULL;
-    }
-    scaled_image_cache.width = 0;
-    scaled_image_cache.height = 0;
-}
-
 // Check if a tool is available in PATH
 int tool_is_available(const char *tool_name) {
     const char *path_env = getenv("PATH");
