@@ -25,6 +25,15 @@ extern int preview_wake_pipe[2];
 extern unsigned long preview_generation;
 extern int preview_worker_started;
 
+/* Preview worker state and image scaling cache. */
+pthread_t preview_thread;
+pthread_mutex_t preview_mutex = PTHREAD_MUTEX_INITIALIZER;
+pthread_cond_t preview_cond = PTHREAD_COND_INITIALIZER;
+PreviewTask preview_task = {0, PREVIEW_RESULT_NONE, NULL};
+int preview_task_pending = 0;
+int preview_worker_stop = 0;
+ScaledImageCache scaled_image_cache = {NULL, 0, 0};
+
 extern int is_small_image(const char *path, off_t max_size);
 extern char *load_text_content(const char *path, off_t max_size);
 extern char *load_html_preview(const char *path);
