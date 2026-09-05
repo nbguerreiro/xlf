@@ -120,12 +120,6 @@ pthread_cond_t preview_cond = PTHREAD_COND_INITIALIZER;
 PreviewTask preview_task = {0, PREVIEW_RESULT_NONE, NULL};
 int preview_task_pending = 0;
 int preview_worker_stop = 0;
-PreviewResult preview_result = {0, PREVIEW_RESULT_NONE, NULL, NULL, {NULL, 0, 0, 0, NULL}, 0};
-int preview_result_ready = 0;
-int preview_wake_pipe[2] = {-1, -1};
-unsigned long preview_generation = 0;
-int preview_worker_started = 0;
-
 
 
 // Tool availability cache (checked once at startup)
