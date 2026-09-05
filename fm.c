@@ -94,45 +94,6 @@ int rename_active = 0;
 char rename_query[SEARCH_MAX];
 size_t rename_query_len = 0;
 
-// Tool availability cache (checked once at startup)
-int tool_lynx_available = 0;
-int tool_pdfinfo_available = 0;
-int tool_mediainfo_available = 0;
-int tool_mp3info_available = 0;
-char status_message[256] = "";
-
-// Check if a tool is available in PATH
-int tool_is_available(const char *tool_name) {
-    const char *path_env = getenv("PATH");
-    if (!path_env) return 0;
-
-    char *path_copy = strdup(path_env);
-    if (!path_copy) return 0;
-
-    int found = 0;
-    const char *token = strtok(path_copy, ":");
-    while (token) {
-        char tool_path[4096];
-        snprintf(tool_path, sizeof(tool_path), "%s/%s", token, tool_name);
-        if (access(tool_path, X_OK) == 0) {
-            found = 1;
-            break;
-        }
-        token = strtok(NULL, ":");
-    }
-
-    free(path_copy);
-    return found;
-}
-
-// Check all tools once at startup
-void check_tool_availability() {
-    tool_lynx_available = tool_is_available("lynx");
-    tool_pdfinfo_available = tool_is_available("pdfinfo");
-    tool_mediainfo_available = tool_is_available("mediainfo");
-    tool_mp3info_available = tool_is_available("mp3info");
-}
-
 static int remove_tree(const char *path) {
     struct stat st;
     if (lstat(path, &st) != 0) return -1;
