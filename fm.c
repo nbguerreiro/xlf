@@ -1648,10 +1648,31 @@ void handle_mouse_button(const XButtonEvent *ev, int win_width, int win_height) 
     }
 }
 
+static void open_selected_file(void) {
+    if (file_list.count <= 0) return;
+
+    FileEntry *entry = &file_list.entries[file_list.selected];
+    if (entry->is_dir || strcmp(entry->name, "..") == 0) return;
+
+    char path[PATH_MAX];
+    int n = snprintf(path, sizeof(path), "%s/%s",
+                     file_list.path, entry->name);
+    if (n < 0 || (size_t)n >= sizeof(path)) return;
+
+    pid_t pid = fork();
+    if (pid == 0) {
+        execlp("xdg-open", "xdg-open", path, (char *)NULL);
+        _exit(127);
+    }
+}
+
 void handle_key(XKeyEvent *ev) {
     KeySym ks = XLookupKeysym(ev, 0);
 
     switch (ks) {
+        case XK_o:
+            open_selected_file();
+            break;
         case XK_j:
             if (file_list.count > 0) {
                 file_list.selected = (file_list.selected + 1) % file_list.count;
