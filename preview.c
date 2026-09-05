@@ -1,4 +1,5 @@
 #include "preview.h"
+#include <pango/pangocairo.h>
 #include <stdlib.h>
 #include <glib-object.h>
 #include <pthread.h>
@@ -478,6 +479,8 @@ void stop_preview_worker() {
 }
 
 
+extern void draw_info_bar(cairo_t *cr, int x, int y, int width);
+extern void draw_image(cairo_t *cr, int x, int y, int width, int height);
 extern void draw_file_entries(cairo_t *cr, FileList *list, int x, int y, int width, int height);
 extern void draw_text(cairo_t *cr, const char *text, int x, int y, int width, PangoLayout *layout);
 extern PangoLayout *layout_normal;
