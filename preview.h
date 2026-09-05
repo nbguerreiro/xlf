@@ -1,8 +1,8 @@
 #ifndef PREVIEW_H
 #define PREVIEW_H
 
-#include <gtk/gtk.h>
 #include <cairo/cairo.h>
+#include <gdk-pixbuf/gdk-pixbuf.h>
 #include "filelist.h"
 
 typedef struct {
@@ -10,30 +10,6 @@ typedef struct {
     int width;
     int height;
 } ScaledImageCache;
-
-typedef enum {
-    PREVIEW_RESULT_NONE,
-    PREVIEW_RESULT_IMAGE,
-    PREVIEW_RESULT_TEXT,
-    PREVIEW_RESULT_HTML,
-    PREVIEW_RESULT_MEDIA,
-    PREVIEW_RESULT_PDF
-} PreviewResultKind;
-
-typedef struct {
-    unsigned long generation;
-    PreviewResultKind kind;
-    char *path;
-} PreviewTask;
-
-typedef struct {
-    unsigned long generation;
-    PreviewResultKind kind;
-    char *text;
-    GdkPixbuf *image;
-    FileList list;
-    int is_dir;
-} PreviewResult;
 
 extern FileList preview_list;
 extern int preview_is_dir;
@@ -56,7 +32,7 @@ void free_preview_text(void);
 void free_preview_media(void);
 void free_scaled_image_cache(void);
 void clear_preview_state(void);
-void free_preview_result(PreviewResult *result);
+void free_preview_result(void *result);
 void apply_preview_result(void);
 void draw_preview(cairo_t *cr, int x, int y, int width, int height);
 
