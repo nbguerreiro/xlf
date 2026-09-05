@@ -25,7 +25,6 @@
 5) Usability features (medium → large effort)
   - [x] Add mouse support: click to select, double-click to open directory/file. (effort: medium)
   - [x] Add more keyboard operations: o to open files, / to search, r to rename, Del to permanently delete, Backspace to send files/folders to trash via the external `trash` command. (effort: medium)
-  - [ ] Make pane ratio configurable and add a shortcut to change it. (effort: small)
   - [ ] Add status bar notifications for missing tools and preview errors. (effort: small)
 
 6) Security & portability (small → medium effort)
