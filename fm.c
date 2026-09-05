@@ -1722,7 +1722,23 @@ static void finish_rename(int accept) {
     if (n < 0 || (size_t)n >= sizeof(new_path)) return;
 
     if (rename(old_path, new_path) == 0) {
-        load_directory(&file_list, file_list.path);
+        // load_directory() replaces list->path, so don't pass file_list.path
+        // directly: it frees that string before duplicating the new path.
+        char current_path[PATH_MAX];
+        int path_len = snprintf(current_path, sizeof(current_path), "%s", file_list.path);
+        if (path_len < 0 || (size_t)path_len >= sizeof(current_path)) return;
+
+        load_directory(&file_list, current_path);
+
+        // Keep the renamed entry selected so the preview and path bar update
+        // to the new name immediately.
+        file_list.selected = 0;
+        for (int i = 0; i < file_list.count; ++i) {
+            if (strcmp(file_list.entries[i].name, rename_query) == 0) {
+                file_list.selected = i;
+                break;
+            }
+        }
         if (file_list.count > 0) {
             request_preview();
         }
