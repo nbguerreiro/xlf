@@ -853,19 +853,32 @@ void draw_path_bar(cairo_t *cr, int x, int y, int width, FileList *list) {
     free(display_path);
 }
 
+static int search_matches(const FileEntry *entry) {
+    return !search_active || search_query_len == 0 ||
+           strcasestr(entry->name, search_query) != NULL;
+}
+
+static int next_search_match(int start, int direction) {
+    if (file_list.count <= 0) return -1;
+    int index = start;
+    for (int i = 0; i < file_list.count; ++i) {
+        index = (index + direction + file_list.count) % file_list.count;
+        if (search_matches(&file_list.entries[index])) return index;
+    }
+    return -1;
+}
+
 void draw_file_entries(cairo_t *cr, const FileList *list, int x, int y, int width, int height) {
     cairo_set_source_rgb(cr, BG_R/255.0, BG_G/255.0, BG_B/255.0);
     cairo_rectangle(cr, x, y, width, height);
     cairo_fill(cr);
 
-    int scroll_offset = 0;
     int visible_items = height / LINE_HEIGHT;
-    if (list->selected >= visible_items) {
-        scroll_offset = list->selected - visible_items + 1;
-    }
+    int row = 0;
+    for (int i = 0; i < list->count && row < visible_items; i++) {
+        if (!search_matches(&list->entries[i])) continue;
 
-    for (int i = scroll_offset; i < list->count && i < scroll_offset + visible_items; i++) {
-        int item_y = y + (i - scroll_offset) * LINE_HEIGHT + MARGIN;
+        int item_y = y + row * LINE_HEIGHT + MARGIN;
 
         if (i == list->selected) {
             cairo_set_source_rgb(cr, 200/255.0, 200/255.0, 200/255.0);
@@ -874,7 +887,7 @@ void draw_file_entries(cairo_t *cr, const FileList *list, int x, int y, int widt
         }
 
         cairo_set_source_rgb(cr, TEXT_R/255.0, TEXT_G/255.0, TEXT_B/255.0);
-        
+
         char display_name[256];
         PangoLayout *layout_to_use;
         if (list->entries[i].is_dir) {
@@ -886,13 +899,26 @@ void draw_file_entries(cairo_t *cr, const FileList *list, int x, int y, int widt
             layout_to_use = layout_normal;
         }
 
-        draw_text(cr, display_name, x + MARGIN, item_y, width - 2 * MARGIN, layout_to_use);
+        draw_text(cr, display_name, x + MARGIN, item_y,
+                  width - 2 * MARGIN, layout_to_use);
+        row++;
     }
 }
 
 void draw_file_list(cairo_t *cr, FileList *list, int x, int y, int width, int height) {
-    // Draw path bar at the top
-    draw_path_bar(cr, x, y, width, list);
+    // Draw search feedback in place of the path bar while searching.
+    if (search_active) {
+        cairo_set_source_rgb(cr, BG_R/255.0, BG_G/255.0, BG_B/255.0);
+        cairo_rectangle(cr, x, y, width, PATH_HEIGHT);
+        cairo_fill(cr);
+        cairo_set_source_rgb(cr, TEXT_R/255.0, TEXT_G/255.0, TEXT_B/255.0);
+        char search_display[SEARCH_MAX + 4];
+        snprintf(search_display, sizeof(search_display), "/%s", search_query);
+        draw_text(cr, search_display, x + MARGIN, (PATH_HEIGHT / 2) - 5,
+                  width - 2 * MARGIN, layout_path);
+    } else {
+        draw_path_bar(cr, x, y, width, list);
+    }
     
     // Draw file entries below
     draw_file_entries(cr, list, x, y + PATH_HEIGHT, width, height - PATH_HEIGHT);
@@ -1740,14 +1766,20 @@ void handle_key(XKeyEvent *ev) {
             break;
         case XK_j:
             if (file_list.count > 0) {
-                file_list.selected = (file_list.selected + 1) % file_list.count;
-                request_preview();
+                int next = next_search_match(file_list.selected, 1);
+                if (next >= 0) {
+                    file_list.selected = next;
+                    request_preview();
+                }
             }
             break;
         case XK_k:
             if (file_list.count > 0) {
-                file_list.selected = (file_list.selected - 1 + file_list.count) % file_list.count;
-                request_preview();
+                int next = next_search_match(file_list.selected, -1);
+                if (next >= 0) {
+                    file_list.selected = next;
+                    request_preview();
+                }
             }
             break;
         case XK_l:
