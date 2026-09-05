@@ -1672,6 +1672,7 @@ void draw_ui(int win_width, int win_height) {
 }
 static void open_file_with_xdg(const char *path) {
     pid_t pid = fork();
+    if (pid < 0) return;
     if (pid == 0) {
         execlp("xdg-open", "xdg-open", path, (char *)NULL);
         _exit(127);
@@ -1818,11 +1819,7 @@ static void open_selected_file(void) {
                      file_list.path, entry->name);
     if (n < 0 || (size_t)n >= sizeof(path)) return;
 
-    pid_t pid = fork();
-    if (pid == 0) {
-        execlp("xdg-open", "xdg-open", path, (char *)NULL);
-        _exit(127);
-    }
+    open_file_with_xdg(path);
 }
 
 static void search_select(void) {
