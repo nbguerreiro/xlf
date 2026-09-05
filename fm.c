@@ -262,15 +262,6 @@ int is_html_file(const char *filename);
 int is_mp3_file(const char *filename);
 int is_media_file(const char *filename);
 
-typedef enum {
-    FILE_TYPE_UNKNOWN,
-    FILE_TYPE_IMAGE,
-    FILE_TYPE_TEXT,
-    FILE_TYPE_HTML,
-    FILE_TYPE_PDF,
-    FILE_TYPE_MP3,
-    FILE_TYPE_MEDIA
-} FileType;
 
 FileType detect_file_type_mime(const char *path) {
     GFile *file;
