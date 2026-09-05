@@ -23,7 +23,7 @@
   - [x] Sanitize and validate paths passed to exec/posix_spawn. (effort: small)
 
 5) Usability features (medium → large effort)
-  - [ ] Add mouse support: click to select, double-click to open directory/file. (effort: medium)
+  - [x] Add mouse support: click to select, double-click to open directory/file. (effort: medium)
   - [ ] Add more keyboard operations: Enter to open, space to page, / to search, r to rename, d to delete. (effort: medium)
   - [ ] Make pane ratio configurable and add a shortcut to change it. (effort: small)
   - [ ] Add status bar notifications for missing tools and preview errors. (effort: small)
