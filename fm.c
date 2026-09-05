@@ -1517,7 +1517,7 @@ void request_preview() {
     if (file_list.count > 0 &&
         file_list.selected >= 0 &&
         file_list.selected < file_list.count) {
-        const FileEntry *entry = &file_list.entries[file_list.selected];
+        const const FileEntry *entry = &file_list.entries[file_list.selected];
         char path[4096];
 
         // ".." is a navigation entry, not a previewable directory. Keep the
