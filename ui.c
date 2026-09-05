@@ -1,3 +1,4 @@
+#define _GNU_SOURCE
 #include "ui.h"
 #include "util.h"
 #include "preview.h"
@@ -202,7 +203,7 @@ static int search_matches(const FileEntry *entry) {
            strcasestr(entry->name, search_query) != NULL;
 }
 
-static int next_search_match(int start, int direction) {
+int ui_next_search_match(int start, int direction) {
     if (file_list.count <= 0) return -1;
     int index = start;
     for (int i = 0; i < file_list.count; ++i) {
