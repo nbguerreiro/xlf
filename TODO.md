@@ -28,7 +28,7 @@
   - [x] Add status bar notifications for missing tools and preview errors. (effort: small)
 
 6) Security & portability (small → medium effort)
-  - [ ] Avoid shell where possible (keep execlp/posix_spawn usage and ensure no shell expansion). (effort: small)
+  - [x] Avoid shell where possible (keep execlp/posix_spawn usage and ensure no shell expansion). (effort: small)
   - [ ] Add build-time checks and optional compile flags to enable/disable preview types. (effort: small)
   - [ ] Document runtime dependencies in README. (effort: small)
 
