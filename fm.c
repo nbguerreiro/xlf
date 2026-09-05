@@ -92,15 +92,6 @@ typedef struct {
     char *path;
 } PreviewTask;
 
-typedef struct {
-    unsigned long generation;
-    PreviewResultKind kind;
-    GdkPixbuf *image;
-    char *text;
-    FileList directory;
-    int has_directory;
-} PreviewResult;
-
 pthread_t preview_thread;
 pthread_mutex_t preview_mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_cond_t preview_cond = PTHREAD_COND_INITIALIZER;
