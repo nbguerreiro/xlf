@@ -1,6 +1,7 @@
 #define _POSIX_C_SOURCE 200809L
 #define _GNU_SOURCE
 #include <stdio.h>
+#include "filelist.h"
 #include <stdlib.h>
 #include <string.h>
 #include <strings.h>
@@ -53,25 +54,6 @@
 #define ENABLE_PREVIEW_MEDIA 1
 #endif
 
-
-typedef struct {
-    char *name;
-    int is_dir;
-} FileEntry;
-
-typedef struct {
-    FileEntry *entries;
-    int count;
-    int capacity;
-    int selected;
-    char *path;
-} FileList;
-
-typedef struct {
-    GdkPixbuf *pixbuf;
-    int width;
-    int height;
-} ScaledImageCache;
 
 Display *dpy;
 Window win;
@@ -167,30 +149,6 @@ int tool_pdfinfo_available = 0;
 int tool_mediainfo_available = 0;
 int tool_mp3info_available = 0;
 char status_message[256] = "";
-
-void init_file_list(FileList *list, const char *path) {
-    list->entries = NULL;
-    list->count = 0;
-    list->capacity = 0;
-    list->selected = 0;
-    list->path = strdup(path);
-}
-
-void free_file_list(FileList *list) {
-    if (!list) return;
-    if (list->entries) {
-        for (int i = 0; i < list->count; i++) {
-            free(list->entries[i].name);
-        }
-    }
-    free(list->entries);
-    free(list->path);
-    list->entries = NULL;
-    list->path = NULL;
-    list->count = 0;
-    list->capacity = 0;
-    list->selected = 0;
-}
 
 void free_preview_image() {
     if (preview_image) {
@@ -776,73 +734,6 @@ void format_file_info(const char *path, const char *name, int is_dir, char *buf,
     strftime(date_str, sizeof(date_str), "%a %b %d %H:%M:%S %Y", tm);
 
     snprintf(buf, buf_size, "%s %ld %ld %s %s", perms, (long)st.st_uid, (long)st.st_gid, size_str, date_str);
-}
-
-int compare_entries(const void *a, const void *b) {
-    const FileEntry *ea = (const FileEntry *)a;
-    const FileEntry *eb = (const FileEntry *)b;
-    // Directories first, then alphabetical
-    if (ea->is_dir != eb->is_dir) {
-        return eb->is_dir - ea->is_dir;
-    }
-    return strcmp(ea->name, eb->name);
-}
-
-void load_directory(FileList *list, const char *path) {
-    DIR *dir;
-    const struct dirent *ent;
-    struct stat st;
-
-    // Free old entries
-    for (int i = 0; i < list->count; i++) {
-        free(list->entries[i].name);
-    }
-    free(list->entries);
-    free(list->path);
-
-    list->entries = NULL;
-    list->count = 0;
-    list->capacity = 0;
-    list->selected = 0;
-    list->path = strdup(path);
-    if (!list->path) list->path = NULL;
-
-    if ((dir = opendir(path)) != NULL) {
-        while ((ent = readdir(dir)) != NULL) {
-            if (strcmp(ent->d_name, ".") == 0) {
-                continue;
-            }
-            // Keep the real parent entry supplied by readdir(); it is added
-            // only for directories where the filesystem exposes it.
-
-
-            char fullpath[4096];
-            snprintf(fullpath, sizeof(fullpath), "%s/%s", path, ent->d_name);
-            
-            if (stat(fullpath, &st) == 0) {
-                if (list->count >= list->capacity) {
-                    size_t newcap = list->capacity == 0 ? 16 : list->capacity * 2;
-                    FileEntry *tmp = realloc(list->entries, newcap * sizeof(FileEntry));
-                    if (!tmp) {
-                        // allocation failed: stop adding further entries
-                        break;
-                    }
-                    list->entries = tmp;
-                    list->capacity = newcap;
-                }
-                char *name = strdup(ent->d_name);
-                if (!name) continue;
-                list->entries[list->count].name = name;
-                list->entries[list->count].is_dir = S_ISDIR(st.st_mode);
-                list->count++;
-            }
-        }
-        closedir(dir);
-    }
-
-    if (list->entries && list->count > 0) {
-        qsort(list->entries, list->count, sizeof(FileEntry), compare_entries);
-    }
 }
 
 void draw_text(cairo_t *cr, const char *text, int x, int y, int width, PangoLayout *layout) {
