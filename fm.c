@@ -76,28 +76,6 @@ char *preview_text_content;
 int preview_is_text;
 
 // Preview loading runs on a dedicated worker so the X11 event loop stays responsive.
-typedef enum {
-    PREVIEW_RESULT_NONE,
-    PREVIEW_RESULT_DIR,
-    PREVIEW_RESULT_IMAGE,
-    PREVIEW_RESULT_TEXT,
-    PREVIEW_RESULT_HTML,
-    PREVIEW_RESULT_PDF,
-    PREVIEW_RESULT_MEDIA
-} PreviewResultKind;
-
-typedef struct {
-    unsigned long generation;
-    PreviewResultKind kind;
-    char *path;
-} PreviewTask;
-
-pthread_t preview_thread;
-pthread_mutex_t preview_mutex = PTHREAD_MUTEX_INITIALIZER;
-pthread_cond_t preview_cond = PTHREAD_COND_INITIALIZER;
-PreviewTask preview_task = {0, PREVIEW_RESULT_NONE, NULL};
-int preview_task_pending = 0;
-int preview_worker_stop = 0;
 PreviewResult preview_result = {0, PREVIEW_RESULT_NONE, NULL, NULL, {NULL, 0, 0, 0, NULL}, 0};
 int preview_result_ready = 0;
 int preview_wake_pipe[2] = {-1, -1};
