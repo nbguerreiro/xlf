@@ -20,6 +20,7 @@ void draw_media_preview(cairo_t *cr, int x, int y, int width, int height);
 void free_draw_surfaces(void);
 int ensure_draw_surfaces(int width, int height);
 void draw_ui(int win_width, int win_height);
+int ui_next_search_match(int start, int direction);
 void set_status(const char *message);
 
 #endif
