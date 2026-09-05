@@ -4,6 +4,7 @@
 #include "filelist.h"
 #include "util.h"
 #include "preview.h"
+#include "ui.h"
 #include <stdlib.h>
 #include <string.h>
 #include <strings.h>
@@ -92,35 +93,6 @@ size_t search_query_len = 0;
 int rename_active = 0;
 char rename_query[SEARCH_MAX];
 size_t rename_query_len = 0;
-
-// Reused Cairo surfaces for the window and off-screen frame buffer.
-cairo_surface_t *window_surface = NULL;
-cairo_surface_t *backbuffer_surface = NULL;
-int surface_width = 0;
-int surface_height = 0;
-
-// Cached Pango objects (reused across frames)
-PangoLayout *layout_normal = NULL;
-PangoLayout *layout_bold = NULL;
-PangoLayout *layout_mono = NULL;
-PangoLayout *layout_small = NULL;
-PangoLayout *layout_path = NULL;
-PangoFontDescription *desc_normal = NULL;
-PangoFontDescription *desc_bold = NULL;
-PangoFontDescription *desc_mono = NULL;
-PangoFontDescription *desc_small = NULL;
-PangoFontDescription *desc_path = NULL;
-
-// Cached scaled image (reused across resize/redraw cycles)
-ScaledImageCache scaled_image_cache = { NULL, 0, 0 };
-
-pthread_t preview_thread;
-pthread_mutex_t preview_mutex = PTHREAD_MUTEX_INITIALIZER;
-pthread_cond_t preview_cond = PTHREAD_COND_INITIALIZER;
-PreviewTask preview_task = {0, PREVIEW_RESULT_NONE, NULL};
-int preview_task_pending = 0;
-int preview_worker_stop = 0;
-
 
 // Tool availability cache (checked once at startup)
 int tool_lynx_available = 0;
