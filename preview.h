@@ -1,0 +1,80 @@
+#ifndef PREVIEW_H
+#define PREVIEW_H
+
+#include <cairo/cairo.h>
+#include <gdk-pixbuf/gdk-pixbuf.h>
+#include "filelist.h"
+
+typedef enum {
+    FILE_TYPE_UNKNOWN,
+    FILE_TYPE_IMAGE,
+    FILE_TYPE_TEXT,
+    FILE_TYPE_HTML,
+    FILE_TYPE_PDF,
+    FILE_TYPE_MP3,
+    FILE_TYPE_MEDIA
+} FileType;
+
+
+typedef struct {
+    GdkPixbuf *pixbuf;
+    int width;
+    int height;
+} ScaledImageCache;
+
+extern FileList preview_list;
+extern int preview_is_dir;
+extern GdkPixbuf *preview_image;
+extern int preview_is_image;
+extern char *preview_html_text;
+extern int preview_is_html;
+extern char *preview_pdf_text;
+extern int preview_is_pdf;
+extern char *preview_media_text;
+extern int preview_is_media;
+extern char *preview_text_content;
+extern int preview_is_text;
+extern ScaledImageCache scaled_image_cache;
+
+void free_preview_image(void);
+void free_preview_html(void);
+void free_preview_pdf(void);
+void free_preview_text(void);
+void free_preview_media(void);
+void free_scaled_image_cache(void);
+void clear_preview_state(void);
+typedef enum {
+    PREVIEW_RESULT_NONE,
+    PREVIEW_RESULT_DIR,
+    PREVIEW_RESULT_IMAGE,
+    PREVIEW_RESULT_TEXT,
+    PREVIEW_RESULT_HTML,
+    PREVIEW_RESULT_PDF,
+    PREVIEW_RESULT_MEDIA
+} PreviewResultKind;
+
+typedef struct {
+    unsigned long generation;
+    PreviewResultKind kind;
+    char *path;
+} PreviewTask;
+
+typedef struct {
+    unsigned long generation;
+    PreviewResultKind kind;
+    GdkPixbuf *image;
+    char *text;
+    FileList directory;
+    int has_directory;
+} PreviewResult;
+void free_preview_result(PreviewResult *result);
+void apply_preview_result(void);
+void draw_preview(cairo_t *cr, int x, int y, int width, int height);
+PreviewResult load_preview_result(const PreviewTask *task);
+void *preview_worker_main(void *unused);
+int start_preview_worker(void);
+void request_preview(void);
+void stop_preview_worker(void);
+FileType detect_file_type(const char *path, const char *filename);
+
+#endif
