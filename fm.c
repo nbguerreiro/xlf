@@ -55,6 +55,12 @@
 #endif
 
 
+typedef struct {
+    GdkPixbuf *pixbuf;
+    int width;
+    int height;
+} ScaledImageCache;
+
 Display *dpy;
 Window win;
 int screen;
