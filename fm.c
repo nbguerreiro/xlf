@@ -109,6 +109,9 @@ int preview_wake_pipe[2] = {-1, -1};
 unsigned long preview_generation = 0;
 int preview_worker_started = 0;
 
+Time last_click_time = 0;
+int last_click_index = -1;
+
 // Reused Cairo surfaces for the window and off-screen frame buffer.
 cairo_surface_t *window_surface = NULL;
 cairo_surface_t *backbuffer_surface = NULL;
@@ -770,9 +773,12 @@ void load_directory(FileList *list, const char *path) {
 
     if ((dir = opendir(path)) != NULL) {
         while ((ent = readdir(dir)) != NULL) {
-            if (strcmp(ent->d_name, ".") == 0 || strcmp(ent->d_name, "..") == 0) {
+            if (strcmp(ent->d_name, ".") == 0) {
                 continue;
             }
+            // Keep the real parent entry supplied by readdir(); it is added
+            // only for directories where the filesystem exposes it.
+
 
             char fullpath[4096];
             snprintf(fullpath, sizeof(fullpath), "%s/%s", path, ent->d_name);
@@ -1420,6 +1426,17 @@ void request_preview() {
         const FileEntry *entry = &file_list.entries[file_list.selected];
         char path[4096];
 
+        // ".." is a navigation entry, not a previewable directory. Keep the
+        // preview pane blank while it is selected.
+        if (strcmp(entry->name, "..") == 0) {
+            preview_task = task;
+            preview_task_pending = 0;
+            pthread_cond_signal(&preview_cond);
+            pthread_mutex_unlock(&preview_mutex);
+            clear_preview_state();
+            return;
+        }
+
         snprintf(path, sizeof(path), "%s/%s", file_list.path, entry->name);
         task.path = strdup(path);
 
@@ -1577,6 +1594,60 @@ void draw_ui(int win_width, int win_height) {
         cairo_destroy(window_cr);
     }
 }
+static void open_file_with_xdg(const char *path) {
+    pid_t pid = fork();
+    if (pid == 0) {
+        execlp("xdg-open", "xdg-open", path, (char *)NULL);
+        _exit(127);
+    }
+}
+
+void handle_mouse_button(const XButtonEvent *ev, int win_width, int win_height) {
+    if (ev->button != Button1 || ev->x < 0 || ev->x >= win_width) return;
+
+    int left_width = (int)(win_width * PANE_RATIO);
+    if (ev->x >= left_width || ev->y < PATH_HEIGHT) return;
+
+    int list_y = ev->y - PATH_HEIGHT;
+    int visible_items = (win_height - PATH_HEIGHT) / LINE_HEIGHT;
+    if (visible_items <= 0 || file_list.count <= 0) return;
+
+    int scroll_offset = 0;
+    if (file_list.selected >= visible_items) {
+        scroll_offset = file_list.selected - visible_items + 1;
+    }
+
+    int row = list_y / LINE_HEIGHT;
+    int index = scroll_offset + row;
+    if (row < 0 || row >= visible_items || index < 0 || index >= file_list.count) return;
+
+    file_list.selected = index;
+    if (strcmp(file_list.entries[index].name, "..") != 0) {
+        request_preview();
+    }
+
+    if (last_click_index == index && ev->time - last_click_time < 400) {
+        char path[PATH_MAX];
+        int n = snprintf(path, sizeof(path), "%s/%s",
+                         file_list.path ? file_list.path : ".",
+                         file_list.entries[index].name);
+        if (n >= 0 && (size_t)n < sizeof(path)) {
+            if (file_list.entries[index].is_dir) {
+                load_directory(&file_list, path);
+                if (strcmp(file_list.entries[file_list.selected].name, "..") != 0) {
+                    request_preview();
+                }
+            } else {
+                open_file_with_xdg(path);
+            }
+        }
+        last_click_index = -1;
+    } else {
+        last_click_index = index;
+        last_click_time = ev->time;
+    }
+}
+
 void handle_key(XKeyEvent *ev) {
     KeySym ks = XLookupKeysym(ev, 0);
 
@@ -1597,8 +1668,10 @@ void handle_key(XKeyEvent *ev) {
             if (file_list.count > 0 && file_list.entries[file_list.selected].is_dir) {
                 char new_path[4096];
                 snprintf(new_path, sizeof(new_path), "%s/%s", file_list.path, file_list.entries[file_list.selected].name);
-                load_directory(&file_list, new_path);
-                request_preview();
+                if (strcmp(file_list.entries[file_list.selected].name, "..") != 0) {
+                    load_directory(&file_list, new_path);
+                    request_preview();
+                }
             }
             break;
         case XK_h:
@@ -1659,7 +1732,7 @@ int main() {
                                win_width, win_height, 0,
                                BlackPixel(dpy, screen), bg_color.pixel);
     XStoreName(dpy, win, "File Manager");
-    XSelectInput(dpy, win, ExposureMask | KeyPressMask | StructureNotifyMask);
+    XSelectInput(dpy, win, ExposureMask | KeyPressMask | ButtonPressMask | StructureNotifyMask);
     XMapWindow(dpy, win);
 
     init_file_list(&file_list, ".");
@@ -1695,6 +1768,18 @@ int main() {
                         unsigned int width, height, border, depth;
                         XGetGeometry(dpy, win, &root, &x, &y, &width, &height, &border, &depth);
                         draw_ui(width, height);
+                    }
+                    break;
+
+                case ButtonPress:
+                    handle_mouse_button(&ev.xbutton, win_width, win_height);
+                    {
+                        Window root;
+                        int x, y;
+                        unsigned int width, height, border, depth;
+                        if (XGetGeometry(dpy, win, &root, &x, &y, &width, &height, &border, &depth)) {
+                            draw_ui(width, height);
+                        }
                     }
                     break;
 
