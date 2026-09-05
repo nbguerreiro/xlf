@@ -12,7 +12,12 @@ Build dependencies
   - pango
   - gdk-pixbuf-2.0
   - libX11 (Xlib)
-- Optional tools (for richer previews):
+- GLib/GIO (used for MIME/type detection)
+- Runtime dependencies
+- An X11 display/server
+- The libraries above must be installed at runtime (not only their development packages).
+
+Optional tools (for richer previews):
   - lynx (HTML -> text)
   - poppler-utils (pdfinfo)
   - mediainfo
@@ -42,7 +47,7 @@ Developer helpers
     make clean
 
 Notes and limitations
-- Some previews rely on external programs; absence of those programs results in no preview for that type.
+- Some previews rely on external programs; absence of those programs results in a status-bar notification and no preview for that type.
 - The program currently does image decoding on the main thread; large images may stall the UI. (Asynchronous preview loader is in progress.)
 - Tested on Linux with X11. Not tested on Wayland.
 

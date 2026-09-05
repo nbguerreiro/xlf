@@ -24,14 +24,12 @@
 
 5) Usability features (medium → large effort)
   - [x] Add mouse support: click to select, double-click to open directory/file. (effort: medium)
-  - [ ] Add more keyboard operations: o to open files, / to search, r to rename, Del to permanently delete, Backspace to send files/folders to trash via the external `trash` command. (effort: medium)
-  - [ ] Make pane ratio configurable and add a shortcut to change it. (effort: small)
-  - [ ] Add status bar notifications for missing tools and preview errors. (effort: small)
+  - [x] Add more keyboard operations: o to open files, / to search, r to rename, Del to permanently delete, Backspace to send files/folders to trash via the external `trash` command. (effort: medium)
+  - [x] Add status bar notifications for missing tools and preview errors. (effort: small)
 
 6) Security & portability (small → medium effort)
-  - [ ] Avoid shell where possible (keep execlp/posix_spawn usage and ensure no shell expansion). (effort: small)
-  - [ ] Add build-time checks and optional compile flags to enable/disable preview types. (effort: small)
-  - [ ] Document runtime dependencies in README. (effort: small)
+  - [x] Avoid shell where possible (keep execlp/posix_spawn usage and ensure no shell expansion). (effort: small)
+  - [x] Document runtime dependencies in README. (effort: small)
 
 7) Project & build hygiene (small effort)
   - [x] Add a Makefile with pkg-config for dependencies and sensible CFLAGS (e.g., -std=c11 -Wall -Wextra). (effort: small)

@@ -34,6 +34,26 @@
 #define INFO_HEIGHT 28
 #define PATH_HEIGHT 28
 
+#ifndef ENABLE_PREVIEW_IMAGE
+#define ENABLE_PREVIEW_IMAGE 1
+#endif
+#ifndef ENABLE_PREVIEW_TEXT
+#define ENABLE_PREVIEW_TEXT 1
+#endif
+#ifndef ENABLE_PREVIEW_HTML
+#define ENABLE_PREVIEW_HTML 1
+#endif
+#ifndef ENABLE_PREVIEW_PDF
+#define ENABLE_PREVIEW_PDF 1
+#endif
+#ifndef ENABLE_PREVIEW_MP3
+#define ENABLE_PREVIEW_MP3 1
+#endif
+#ifndef ENABLE_PREVIEW_MEDIA
+#define ENABLE_PREVIEW_MEDIA 1
+#endif
+
+
 typedef struct {
     char *name;
     int is_dir;
@@ -112,6 +132,14 @@ int preview_worker_started = 0;
 Time last_click_time = 0;
 int last_click_index = -1;
 
+#define SEARCH_MAX 256
+int search_active = 0;
+char search_query[SEARCH_MAX];
+size_t search_query_len = 0;
+int rename_active = 0;
+char rename_query[SEARCH_MAX];
+size_t rename_query_len = 0;
+
 // Reused Cairo surfaces for the window and off-screen frame buffer.
 cairo_surface_t *window_surface = NULL;
 cairo_surface_t *backbuffer_surface = NULL;
@@ -138,6 +166,7 @@ int tool_lynx_available = 0;
 int tool_pdfinfo_available = 0;
 int tool_mediainfo_available = 0;
 int tool_mp3info_available = 0;
+char status_message[256] = "";
 
 void init_file_list(FileList *list, const char *path) {
     list->entries = NULL;
@@ -387,14 +416,21 @@ FileType detect_file_type_mime(const char *path) {
 
 FileType detect_file_type(const char *path, const char *filename) {
     FileType type = detect_file_type_mime(path);
+
+    if (type == FILE_TYPE_IMAGE && !ENABLE_PREVIEW_IMAGE) return FILE_TYPE_UNKNOWN;
+    if (type == FILE_TYPE_TEXT && !ENABLE_PREVIEW_TEXT) return FILE_TYPE_UNKNOWN;
+    if (type == FILE_TYPE_HTML && !ENABLE_PREVIEW_HTML) return FILE_TYPE_UNKNOWN;
+    if (type == FILE_TYPE_PDF && !ENABLE_PREVIEW_PDF) return FILE_TYPE_UNKNOWN;
+    if (type == FILE_TYPE_MP3 && !ENABLE_PREVIEW_MP3) return FILE_TYPE_UNKNOWN;
+    if (type == FILE_TYPE_MEDIA && !ENABLE_PREVIEW_MEDIA) return FILE_TYPE_UNKNOWN;
     if (type != FILE_TYPE_UNKNOWN) return type;
 
-    if (is_image_file(filename)) return FILE_TYPE_IMAGE;
-    if (is_text_file(filename)) return FILE_TYPE_TEXT;
-    if (is_html_file(filename)) return FILE_TYPE_HTML;
-    if (is_pdf_file(filename)) return FILE_TYPE_PDF;
-    if (is_mp3_file(filename)) return FILE_TYPE_MP3;
-    if (is_media_file(filename)) return FILE_TYPE_MEDIA;
+    if (ENABLE_PREVIEW_IMAGE && is_image_file(filename)) return FILE_TYPE_IMAGE;
+    if (ENABLE_PREVIEW_TEXT && is_text_file(filename)) return FILE_TYPE_TEXT;
+    if (ENABLE_PREVIEW_HTML && is_html_file(filename)) return FILE_TYPE_HTML;
+    if (ENABLE_PREVIEW_PDF && is_pdf_file(filename)) return FILE_TYPE_PDF;
+    if (ENABLE_PREVIEW_MP3 && is_mp3_file(filename)) return FILE_TYPE_MP3;
+    if (ENABLE_PREVIEW_MEDIA && is_media_file(filename)) return FILE_TYPE_MEDIA;
     return FILE_TYPE_UNKNOWN;
 }
 
@@ -848,19 +884,32 @@ void draw_path_bar(cairo_t *cr, int x, int y, int width, FileList *list) {
     free(display_path);
 }
 
+static int search_matches(const FileEntry *entry) {
+    return !search_active || search_query_len == 0 ||
+           strcasestr(entry->name, search_query) != NULL;
+}
+
+static int next_search_match(int start, int direction) {
+    if (file_list.count <= 0) return -1;
+    int index = start;
+    for (int i = 0; i < file_list.count; ++i) {
+        index = (index + direction + file_list.count) % file_list.count;
+        if (search_matches(&file_list.entries[index])) return index;
+    }
+    return -1;
+}
+
 void draw_file_entries(cairo_t *cr, const FileList *list, int x, int y, int width, int height) {
     cairo_set_source_rgb(cr, BG_R/255.0, BG_G/255.0, BG_B/255.0);
     cairo_rectangle(cr, x, y, width, height);
     cairo_fill(cr);
 
-    int scroll_offset = 0;
     int visible_items = height / LINE_HEIGHT;
-    if (list->selected >= visible_items) {
-        scroll_offset = list->selected - visible_items + 1;
-    }
+    int row = 0;
+    for (int i = 0; i < list->count && row < visible_items; i++) {
+        if (!search_matches(&list->entries[i])) continue;
 
-    for (int i = scroll_offset; i < list->count && i < scroll_offset + visible_items; i++) {
-        int item_y = y + (i - scroll_offset) * LINE_HEIGHT + MARGIN;
+        int item_y = y + row * LINE_HEIGHT + MARGIN;
 
         if (i == list->selected) {
             cairo_set_source_rgb(cr, 200/255.0, 200/255.0, 200/255.0);
@@ -869,7 +918,7 @@ void draw_file_entries(cairo_t *cr, const FileList *list, int x, int y, int widt
         }
 
         cairo_set_source_rgb(cr, TEXT_R/255.0, TEXT_G/255.0, TEXT_B/255.0);
-        
+
         char display_name[256];
         PangoLayout *layout_to_use;
         if (list->entries[i].is_dir) {
@@ -881,13 +930,43 @@ void draw_file_entries(cairo_t *cr, const FileList *list, int x, int y, int widt
             layout_to_use = layout_normal;
         }
 
-        draw_text(cr, display_name, x + MARGIN, item_y, width - 2 * MARGIN, layout_to_use);
+        draw_text(cr, display_name, x + MARGIN, item_y,
+                  width - 2 * MARGIN, layout_to_use);
+        row++;
     }
 }
 
+static void set_status(const char *message) {
+    if (!message) {
+        status_message[0] = '\0';
+        return;
+    }
+    snprintf(status_message, sizeof(status_message), "%s", message);
+}
+
 void draw_file_list(cairo_t *cr, FileList *list, int x, int y, int width, int height) {
-    // Draw path bar at the top
-    draw_path_bar(cr, x, y, width, list);
+    // Draw search/rename feedback in the path bar.
+    if (rename_active) {
+        cairo_set_source_rgb(cr, BG_R/255.0, BG_G/255.0, BG_B/255.0);
+        cairo_rectangle(cr, x, y, width, PATH_HEIGHT);
+        cairo_fill(cr);
+        cairo_set_source_rgb(cr, TEXT_R/255.0, TEXT_G/255.0, TEXT_B/255.0);
+        char rename_display[SEARCH_MAX + 10];
+        snprintf(rename_display, sizeof(rename_display), "Rename: %s", rename_query);
+        draw_text(cr, rename_display, x + MARGIN, (PATH_HEIGHT / 2) - 5,
+                  width - 2 * MARGIN, layout_path);
+    } else if (search_active) {
+        cairo_set_source_rgb(cr, BG_R/255.0, BG_G/255.0, BG_B/255.0);
+        cairo_rectangle(cr, x, y, width, PATH_HEIGHT);
+        cairo_fill(cr);
+        cairo_set_source_rgb(cr, TEXT_R/255.0, TEXT_G/255.0, TEXT_B/255.0);
+        char search_display[SEARCH_MAX + 4];
+        snprintf(search_display, sizeof(search_display), "/%s", search_query);
+        draw_text(cr, search_display, x + MARGIN, (PATH_HEIGHT / 2) - 5,
+                  width - 2 * MARGIN, layout_path);
+    } else {
+        draw_path_bar(cr, x, y, width, list);
+    }
     
     // Draw file entries below
     draw_file_entries(cr, list, x, y + PATH_HEIGHT, width, height - PATH_HEIGHT);
@@ -1216,6 +1295,21 @@ void apply_preview_result() {
 
     clear_preview_state();
 
+    if (result.kind != PREVIEW_RESULT_NONE && result.kind != PREVIEW_RESULT_DIR &&
+        !result.image && !result.text) {
+        set_status("Preview could not be loaded.");
+    } else if (result.text && strncmp(result.text, "Tool '", 6) == 0) {
+        const char *end = strchr(result.text, '\n');
+        char message[256];
+        size_t len = end ? (size_t)(end - result.text) : strlen(result.text);
+        if (len >= sizeof(message)) len = sizeof(message) - 1;
+        memcpy(message, result.text, len);
+        message[len] = '\0';
+        set_status(message);
+    } else {
+        set_status("");
+    }
+
     switch (result.kind) {
         case PREVIEW_RESULT_DIR:
             preview_list = result.directory;
@@ -1423,7 +1517,7 @@ void request_preview() {
     if (file_list.count > 0 &&
         file_list.selected >= 0 &&
         file_list.selected < file_list.count) {
-        const FileEntry *entry = &file_list.entries[file_list.selected];
+        const const FileEntry *entry = &file_list.entries[file_list.selected];
         char path[4096];
 
         // ".." is a navigation entry, not a previewable directory. Keep the
@@ -1573,6 +1667,15 @@ void draw_ui(int win_width, int win_height) {
     draw_file_list(cr, &file_list, 0, 0, left_width, win_height);
     draw_preview(cr, left_width, 0, right_width, win_height);
 
+    if (status_message[0] != '\0') {
+        cairo_set_source_rgb(cr, BG_R/255.0, BG_G/255.0, BG_B/255.0);
+        cairo_rectangle(cr, 0, win_height - INFO_HEIGHT, win_width, INFO_HEIGHT);
+        cairo_fill(cr);
+        cairo_set_source_rgb(cr, TEXT_R/255.0, TEXT_G/255.0, TEXT_B/255.0);
+        draw_text(cr, status_message, MARGIN, win_height - INFO_HEIGHT + 5,
+                  win_width - 2 * MARGIN, layout_small);
+    }
+
     cairo_set_source_rgb(cr, 150/255.0, 150/255.0, 150/255.0);
     cairo_set_line_width(cr, 1.0);
     cairo_move_to(cr, left_width, 0);
@@ -1596,6 +1699,7 @@ void draw_ui(int win_width, int win_height) {
 }
 static void open_file_with_xdg(const char *path) {
     pid_t pid = fork();
+    if (pid < 0) return;
     if (pid == 0) {
         execlp("xdg-open", "xdg-open", path, (char *)NULL);
         _exit(127);
@@ -1648,29 +1752,219 @@ void handle_mouse_button(const XButtonEvent *ev, int win_width, int win_height) 
     }
 }
 
+static void begin_rename(void) {
+    if (file_list.count <= 0) return;
+    const FileEntry *entry = &file_list.entries[file_list.selected];
+    if (strcmp(entry->name, "..") == 0) return;
+
+    rename_active = 1;
+    rename_query_len = strlen(entry->name);
+    if (rename_query_len >= SEARCH_MAX) rename_query_len = SEARCH_MAX - 1;
+    memcpy(rename_query, entry->name, rename_query_len);
+    rename_query[rename_query_len] = '\0';
+}
+
+static void finish_rename(int accept) {
+    if (!rename_active) return;
+    rename_active = 0;
+    if (!accept || rename_query_len == 0) return;
+
+    const FileEntry *entry = &file_list.entries[file_list.selected];
+    if (strcmp(entry->name, rename_query) == 0) return;
+
+    for (const unsigned char *p = (const unsigned char *)rename_query; *p; ++p) {
+        if (*p == '/' || *p < 0x20 || *p == 0x7f) return;
+    }
+
+    char old_path[PATH_MAX], new_path[PATH_MAX];
+    int n = snprintf(old_path, sizeof(old_path), "%s/%s", file_list.path, entry->name);
+    if (n < 0 || (size_t)n >= sizeof(old_path)) return;
+    n = snprintf(new_path, sizeof(new_path), "%s/%s", file_list.path, rename_query);
+    if (n < 0 || (size_t)n >= sizeof(new_path)) return;
+
+    if (rename(old_path, new_path) == 0) {
+        // load_directory() replaces list->path, so don't pass file_list.path
+        // directly: it frees that string before duplicating the new path.
+        char current_path[PATH_MAX];
+        int path_len = snprintf(current_path, sizeof(current_path), "%s", file_list.path);
+        if (path_len < 0 || (size_t)path_len >= sizeof(current_path)) return;
+
+        load_directory(&file_list, current_path);
+
+        // Keep the renamed entry selected so the preview and path bar update
+        // to the new name immediately.
+        file_list.selected = 0;
+        for (int i = 0; i < file_list.count; ++i) {
+            if (strcmp(file_list.entries[i].name, rename_query) == 0) {
+                file_list.selected = i;
+                break;
+            }
+        }
+        if (file_list.count > 0) {
+            request_preview();
+        }
+    }
+}
+
+static void handle_rename_key(XKeyEvent *ev, KeySym ks) {
+    if (ks == XK_Escape) {
+        finish_rename(0);
+        return;
+    }
+    if (ks == XK_Return || ks == XK_KP_Enter) {
+        finish_rename(1);
+        return;
+    }
+    if (ks == XK_BackSpace) {
+        if (rename_query_len > 0) rename_query[--rename_query_len] = '\0';
+        return;
+    }
+
+    char input[SEARCH_MAX];
+    KeySym translated;
+    int n = XLookupString(ev, input, sizeof(input) - 1, &translated, NULL);
+    if (n <= 0 || rename_query_len + (size_t)n >= SEARCH_MAX) return;
+
+    for (int i = 0; i < n; ++i) {
+        unsigned char ch = (unsigned char)input[i];
+        if (ch < 0x20 || ch == 0x7f || ch == '/') return;
+    }
+
+    memcpy(rename_query + rename_query_len, input, (size_t)n);
+    rename_query_len += (size_t)n;
+    rename_query[rename_query_len] = '\0';
+}
+
+static void open_selected_file(void) {
+    if (file_list.count <= 0) return;
+
+    const FileEntry *entry = &file_list.entries[file_list.selected];
+    if (entry->is_dir || strcmp(entry->name, "..") == 0) return;
+
+    char path[PATH_MAX];
+    int n = snprintf(path, sizeof(path), "%s/%s",
+                     file_list.path, entry->name);
+    if (n < 0 || (size_t)n >= sizeof(path)) return;
+
+    open_file_with_xdg(path);
+}
+
+static void search_select(void) {
+    if (!search_active || search_query_len == 0 || file_list.count <= 0) return;
+
+    int start = file_list.selected;
+    for (int offset = 1; offset <= file_list.count; ++offset) {
+        int index = (start + offset) % file_list.count;
+        if (strcasestr(file_list.entries[index].name, search_query) != NULL) {
+            file_list.selected = index;
+            request_preview();
+            return;
+        }
+    }
+
+    if (strcasestr(file_list.entries[start].name, search_query) != NULL) {
+        request_preview();
+    }
+}
+
+static void handle_search_key(XKeyEvent *ev, KeySym ks) {
+    if (ks == XK_Escape || ks == XK_Return || ks == XK_KP_Enter) {
+        search_active = 0;
+        search_query_len = 0;
+        search_query[0] = '\0';
+        return;
+    }
+
+    if (ks == XK_BackSpace) {
+        if (search_query_len > 0) {
+            search_query[--search_query_len] = '\0';
+            search_select();
+        }
+        return;
+    }
+
+    char input[8];
+    KeySym translated;
+    int n = XLookupString(ev, input, sizeof(input) - 1, &translated, NULL);
+    if (n <= 0 || search_query_len + (size_t)n >= SEARCH_MAX) return;
+
+    for (int i = 0; i < n; ++i) {
+        unsigned char ch = (unsigned char)input[i];
+        if (ch < 0x20 || ch == 0x7f) return;
+    }
+
+    memcpy(search_query + search_query_len, input, (size_t)n);
+    search_query_len += (size_t)n;
+    search_query[search_query_len] = '\0';
+    search_select();
+}
+
 void handle_key(XKeyEvent *ev) {
     KeySym ks = XLookupKeysym(ev, 0);
 
+    if (rename_active) {
+        handle_rename_key(ev, ks);
+        return;
+    }
+
+    if (search_active) {
+        if (ks == XK_Up || ks == XK_Down) {
+            int next = next_search_match(file_list.selected, ks == XK_Down ? 1 : -1);
+            if (next >= 0) {
+                file_list.selected = next;
+                request_preview();
+            }
+            return;
+        }
+        handle_search_key(ev, ks);
+        return;
+    }
+
     switch (ks) {
+        case XK_slash:
+            search_active = 1;
+            search_query_len = 0;
+            search_query[0] = '\0';
+            break;
+        case XK_o:
+            open_selected_file();
+            break;
+        case XK_r:
+            begin_rename();
+            break;
         case XK_j:
             if (file_list.count > 0) {
-                file_list.selected = (file_list.selected + 1) % file_list.count;
-                request_preview();
+                int next = next_search_match(file_list.selected, 1);
+                if (next >= 0) {
+                    file_list.selected = next;
+                    request_preview();
+                }
             }
             break;
         case XK_k:
             if (file_list.count > 0) {
-                file_list.selected = (file_list.selected - 1 + file_list.count) % file_list.count;
-                request_preview();
+                int next = next_search_match(file_list.selected, -1);
+                if (next >= 0) {
+                    file_list.selected = next;
+                    request_preview();
+                }
             }
             break;
         case XK_l:
-            if (file_list.count > 0 && file_list.entries[file_list.selected].is_dir) {
-                char new_path[4096];
-                snprintf(new_path, sizeof(new_path), "%s/%s", file_list.path, file_list.entries[file_list.selected].name);
-                if (strcmp(file_list.entries[file_list.selected].name, "..") != 0) {
-                    load_directory(&file_list, new_path);
-                    request_preview();
+            if (file_list.count > 0) {
+                const FileEntry *entry = &file_list.entries[file_list.selected];
+
+                if (entry->is_dir) {
+                    char new_path[PATH_MAX];
+                    int n = snprintf(new_path, sizeof(new_path), "%s/%s",
+                                     file_list.path, entry->name);
+                    if (n >= 0 && (size_t)n < sizeof(new_path) &&
+                        strcmp(entry->name, "..") != 0) {
+                        load_directory(&file_list, new_path);
+                        request_preview();
+                    }
+                } else {
+                    open_selected_file();
                 }
             }
             break;
