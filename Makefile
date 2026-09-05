@@ -5,7 +5,7 @@ CFLAGS ?= -std=c11 -O2 -Wall -Wextra
 CFLAGS += $(PKG_CFLAGS)
 LDFLAGS ?=
 LDFLAGS += $(PKG_LIBS) -pthread
-SRC := fm.c
+SRC := fm.c filelist.c
 BIN := fm
 
 .PHONY: all run clean sanitize lint test deps check-deps
