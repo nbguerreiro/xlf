@@ -5,6 +5,17 @@
 #include <gdk-pixbuf/gdk-pixbuf.h>
 #include "filelist.h"
 
+typedef enum {
+    FILE_TYPE_UNKNOWN,
+    FILE_TYPE_IMAGE,
+    FILE_TYPE_TEXT,
+    FILE_TYPE_HTML,
+    FILE_TYPE_PDF,
+    FILE_TYPE_MP3,
+    FILE_TYPE_MEDIA
+} FileType;
+
+
 typedef struct {
     GdkPixbuf *pixbuf;
     int width;
@@ -64,5 +75,6 @@ void *preview_worker_main(void *unused);
 int start_preview_worker(void);
 void request_preview(void);
 void stop_preview_worker(void);
+FileType detect_file_type(const char *path, const char *filename);
 
 #endif
