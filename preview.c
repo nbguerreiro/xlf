@@ -7,7 +7,6 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <errno.h>
-#define _POSIX_C_SOURCE 200809L
 #include <sys/types.h>
 extern FileList file_list;
 extern pthread_t preview_thread;
@@ -288,7 +287,7 @@ PreviewResult load_preview_result(const PreviewTask *task) {
             break;
 
         case PREVIEW_RESULT_MEDIA:
-            result.text = is_mp3_file(task->path)
+            result.text = load_mp3_info(task->path)
                 ? load_mp3_info(task->path)
                 : load_media_preview(task->path);
             if (result.text && result.text[0] == '\0') {
@@ -415,7 +414,7 @@ void request_preview() {
         }
 
         snprintf(path, sizeof(path), "%s/%s", file_list.path, entry->name);
-        task.path = strdup(path);
+        task.path = g_strdup(path);
 
         if (task.path) {
             if (entry->is_dir) {
