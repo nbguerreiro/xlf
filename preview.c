@@ -5,6 +5,9 @@
 #include <pthread.h>
 #include <string.h>
 #include <stdio.h>
+#include <strings.h>
+#include <sys/stat.h>
+#include <sys/wait.h>
 #include <unistd.h>
 #include <fcntl.h>
 #include <errno.h>
@@ -23,7 +26,7 @@ extern unsigned long preview_generation;
 extern int preview_worker_started;
 
 extern int is_small_image(const char *path, off_t max_size);
-extern char *load_text_content(const char *path, size_t max_size);
+extern char *load_text_content(const char *path, off_t max_size);
 extern char *load_html_preview(const char *path);
 extern char *load_pdf_preview(const char *path);
 extern char *load_mp3_info(const char *path);
@@ -976,7 +979,7 @@ char *load_text_preview(const char *cmd, const char *arg1, const char *arg2, con
 
 char *load_html_preview(const char *path) {
     if (!tool_lynx_available) {
-        return strdup("Tool 'lynx' not found.\nInstall lynx to preview HTML files.\n\n"
+        return g_strdup("Tool 'lynx' not found.\nInstall lynx to preview HTML files.\n\n"
                       "On Ubuntu/Debian: sudo apt install lynx\n"
                       "On macOS: brew install lynx\n"
                       "On Fedora: sudo dnf install lynx");
@@ -1017,7 +1020,7 @@ char *load_text_content(const char *path, off_t max_size) {
 
 char *load_pdf_preview(const char *path) {
     if (!tool_pdfinfo_available) {
-        return strdup("Tool 'pdfinfo' not found.\nInstall poppler-utils to preview PDF metadata.\n\n"
+        return g_strdup("Tool 'pdfinfo' not found.\nInstall poppler-utils to preview PDF metadata.\n\n"
                       "On Ubuntu/Debian: sudo apt install poppler-utils\n"
                       "On macOS: brew install poppler\n"
                       "On Fedora: sudo dnf install poppler-utils");
@@ -1027,7 +1030,7 @@ char *load_pdf_preview(const char *path) {
 
 char *load_media_preview(const char *path) {
     if (!tool_mediainfo_available) {
-        return strdup("Tool 'mediainfo' not found.\nInstall mediainfo to preview audio/video metadata.\n\n"
+        return g_strdup("Tool 'mediainfo' not found.\nInstall mediainfo to preview audio/video metadata.\n\n"
                       "On Ubuntu/Debian: sudo apt install mediainfo\n"
                       "On macOS: brew install mediainfo\n"
                       "On Fedora: sudo dnf install mediainfo");
@@ -1037,7 +1040,7 @@ char *load_media_preview(const char *path) {
 
 char *load_mp3_info(const char *path) {
     if (!tool_mp3info_available) {
-        return strdup("Tool 'mp3info' not found.\nInstall mp3info to preview MP3 metadata.\n\n"
+        return g_strdup("Tool 'mp3info' not found.\nInstall mp3info to preview MP3 metadata.\n\n"
                       "On Ubuntu/Debian: sudo apt install mp3info\n"
                       "On macOS: brew install mp3info\n"
                       "On Fedora: sudo dnf install mp3info");
