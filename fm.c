@@ -61,6 +61,7 @@
 Display *dpy;
 Window win;
 int screen;
+char status_message[256] = {0};
 
 FileList file_list;
 FileList preview_list;
