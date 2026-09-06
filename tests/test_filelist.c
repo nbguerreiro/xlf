@@ -40,7 +40,7 @@ int main(void) {
 
     load_directory(&list, dir);
 
-    assert(list.count == 3);
+    assert(list.count == 5);
 
     assert(strcmp(list.entries[0].name, ".hidden") == 0);
     assert(!list.entries[0].is_dir);
