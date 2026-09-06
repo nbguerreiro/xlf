@@ -39,13 +39,20 @@ int main(void) {
     assert(list.path != NULL);
 
     load_directory(&list, dir);
-    assert(list.count == 3);
-    assert(strcmp(list.entries[0].name, "subdir") == 0);
-    assert(list.entries[0].is_dir);
+
+    assert(list.count == 4);
+
+    assert(strcmp(list.entries[0].name, ".hidden") == 0);
+    assert(!list.entries[0].is_dir);
+
     assert(strcmp(list.entries[1].name, "a.txt") == 0);
     assert(!list.entries[1].is_dir);
+
     assert(strcmp(list.entries[2].name, "b.txt") == 0);
     assert(!list.entries[2].is_dir);
+
+    assert(strcmp(list.entries[3].name, "subdir") == 0);
+    assert(list.entries[3].is_dir);
 
     free_file_list(&list);
     assert(list.entries == NULL);
@@ -61,3 +68,4 @@ int main(void) {
     puts("filelist tests: ok");
     return 0;
 }
+
