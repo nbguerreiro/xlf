@@ -31,8 +31,16 @@ sanitize: clean $(BIN)
 lint:
 	$(CC) -fsyntax-only -Wall -Wextra $(CFLAGS) $(SRC)
 
-test:
-	@echo "No automated tests are configured. Run ./fm and try different files."
+test: $(BIN) tests/test_filelist tests/test_type_detection
+	./tests/test_filelist
+	./tests/test_type_detection
+
+tests/test_filelist: tests/test_filelist.c filelist.c filelist.h
+	$(CC) $(CFLAGS) -I. -o $@ tests/test_filelist.c filelist.c
+
+tests/test_type_detection: tests/test_type_detection.c preview.c preview.h filelist.h
+	$(CC) $(CFLAGS) -ffunction-sections -fdata-sections -I. -o $@ tests/test_type_detection.c preview.c $(LDFLAGS) -Wl,--gc-sections
+
 
 deps:
 	@echo "Required system packages:"
