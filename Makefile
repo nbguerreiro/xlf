@@ -22,7 +22,7 @@ run: $(BIN)
 	./$(BIN)
 
 clean:
-	rm -f $(BIN)
+	rm -f $(BIN) tests/test_filelist tests/test_type_detection
 
 sanitize: CFLAGS += -g -O1 -fsanitize=address,undefined -fno-omit-frame-pointer
 sanitize: clean $(BIN)
