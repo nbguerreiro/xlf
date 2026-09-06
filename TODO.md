@@ -38,7 +38,7 @@
 
 8) Refactor / architecture (large effort)
   - [ ] Split into modules: filelist.{c,h}, preview.{c,h}, ui.{c,h}, util.{c,h}. (effort: large)
-  - [ ] Add unit tests for file scanning and type detection. (effort: large)
+  - [x] Add unit tests for file scanning and type detection. (effort: large)
   - [ ] Add CI with sanitizers and static analysis. (effort: large)
 
 9) Concrete small fixes called out earlier (very small → small)
