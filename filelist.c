@@ -36,9 +36,6 @@ int compare_entries(const void *a, const void *b) {
     const FileEntry *ea = (const FileEntry *)a;
     const FileEntry *eb = (const FileEntry *)b;
 
-    if (ea->is_dir != eb->is_dir) {
-        return eb->is_dir - ea->is_dir;
-    }
     return strcmp(ea->name, eb->name);
 }
 
