@@ -14,6 +14,70 @@ void init_file_list(FileList *list, const char *path) {
     list->capacity = 0;
     list->selected = 0;
     list->path = strdup(path);
+    list->selection_history = NULL;
+    list->selection_history_count = 0;
+    list->selection_history_capacity = 0;
+}
+
+static void remember_selection(FileList *list) {
+    if (!list || !list->path || !list->entries ||
+        list->selected < 0 || list->selected >= list->count) {
+        return;
+    }
+
+    const char *name = list->entries[list->selected].name;
+    for (size_t i = 0; i < list->selection_history_count; ++i) {
+        if (strcmp(list->selection_history[i].path, list->path) == 0) {
+            char *copy = strdup(name);
+            if (!copy) return;
+            free(list->selection_history[i].name);
+            list->selection_history[i].name = copy;
+            return;
+        }
+    }
+
+    if (list->selection_history_count >= list->selection_history_capacity) {
+        size_t new_capacity = list->selection_history_capacity == 0
+            ? 8 : list->selection_history_capacity * 2;
+        SelectionMemory *tmp = realloc(
+            list->selection_history,
+            new_capacity * sizeof(*list->selection_history));
+        if (!tmp) return;
+        list->selection_history = tmp;
+        list->selection_history_capacity = new_capacity;
+    }
+
+    char *path_copy = strdup(list->path);
+    char *name_copy = strdup(name);
+    if (!path_copy || !name_copy) {
+        free(path_copy);
+        free(name_copy);
+        return;
+    }
+
+    list->selection_history[list->selection_history_count].path = path_copy;
+    list->selection_history[list->selection_history_count].name = name_copy;
+    list->selection_history_count++;
+}
+
+static void restore_selection(FileList *list) {
+    list->selected = 0;
+    if (!list->path || !list->entries || list->count <= 0) return;
+
+    for (size_t i = 0; i < list->selection_history_count; ++i) {
+        if (strcmp(list->selection_history[i].path, list->path) != 0) {
+            continue;
+        }
+
+        for (int j = 0; j < list->count; ++j) {
+            if (strcmp(list->entries[j].name,
+                       list->selection_history[i].name) == 0) {
+                list->selected = j;
+                return;
+            }
+        }
+        return;
+    }
 }
 
 void free_file_list(FileList *list) {
@@ -25,6 +89,14 @@ void free_file_list(FileList *list) {
     }
     free(list->entries);
     free(list->path);
+    for (size_t i = 0; i < list->selection_history_count; ++i) {
+        free(list->selection_history[i].path);
+        free(list->selection_history[i].name);
+    }
+    free(list->selection_history);
+    list->selection_history = NULL;
+    list->selection_history_count = 0;
+    list->selection_history_capacity = 0;
     list->entries = NULL;
     list->path = NULL;
     list->count = 0;
@@ -46,6 +118,8 @@ void load_directory(FileList *list, const char *path) {
     DIR *dir;
     const struct dirent *ent;
     struct stat st;
+
+    remember_selection(list);
 
     for (int i = 0; i < list->count; i++) {
         free(list->entries[i].name);
@@ -97,4 +171,6 @@ void load_directory(FileList *list, const char *path) {
     if (list->entries && list->count > 0) {
         qsort(list->entries, list->count, sizeof(FileEntry), compare_entries);
     }
+
+    restore_selection(list);
 }
