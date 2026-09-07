@@ -196,7 +196,7 @@ void apply_preview_result() {
 
     result = preview_result;
     preview_result = (PreviewResult){0, PREVIEW_RESULT_NONE, NULL, NULL,
-                                     {NULL, 0, 0, 0, NULL}, 0};
+                                     {.entries = NULL, .count = 0, .capacity = 0, .selected = 0, .path = NULL, .selection_history = NULL, .selection_history_count = 0, .selection_history_capacity = 0}, 0};
     preview_result_ready = 0;
     pthread_mutex_unlock(&preview_mutex);
 
@@ -231,7 +231,7 @@ void apply_preview_result() {
     switch (result.kind) {
         case PREVIEW_RESULT_DIR:
             preview_list = result.directory;
-            result.directory = (FileList){NULL, 0, 0, 0, NULL};
+            result.directory = (FileList){.entries = NULL, .count = 0, .capacity = 0, .selected = 0, .path = NULL, .selection_history = NULL, .selection_history_count = 0, .selection_history_capacity = 0};
             result.has_directory = 0;
             preview_is_dir = 1;
             break;
@@ -275,7 +275,7 @@ void apply_preview_result() {
 PreviewResult load_preview_result(const PreviewTask *task) {
     PreviewResult result = {
         task->generation, task->kind, NULL, NULL,
-        {NULL, 0, 0, 0, NULL}, 0
+        {.entries = NULL, .count = 0, .capacity = 0, .selected = 0, .path = NULL, .selection_history = NULL, .selection_history_count = 0, .selection_history_capacity = 0}, 0
     };
 
     if (!task->path) return result;
@@ -379,7 +379,7 @@ void *preview_worker_main(void *unused) {
         if (preview_result_ready) {
             PreviewResult old_result = preview_result;
             preview_result = (PreviewResult){0, PREVIEW_RESULT_NONE, NULL, NULL,
-                                             {NULL, 0, 0, 0, NULL}, 0};
+                                             {.entries = NULL, .count = 0, .capacity = 0, .selected = 0, .path = NULL, .selection_history = NULL, .selection_history_count = 0, .selection_history_capacity = 0}, 0};
             preview_result_ready = 0;
             pthread_mutex_unlock(&preview_mutex);
             free_preview_result(&old_result);
@@ -503,7 +503,7 @@ void stop_preview_worker() {
 
     PreviewResult result = preview_result;
     preview_result = (PreviewResult){0, PREVIEW_RESULT_NONE, NULL, NULL,
-                                     {NULL, 0, 0, 0, NULL}, 0};
+                                     {.entries = NULL, .count = 0, .capacity = 0, .selected = 0, .path = NULL, .selection_history = NULL, .selection_history_count = 0, .selection_history_capacity = 0}, 0};
     preview_result_ready = 0;
     pthread_mutex_unlock(&preview_mutex);
 
@@ -997,79 +997,3 @@ char *load_text_preview(const char *cmd, const char *arg1, const char *arg2, con
         free(buffer);
         return NULL;
     }
-
-    buffer[total] = '\0';
-    return buffer;
-}
-
-char *load_html_preview(const char *path) {
-    if (!tool_lynx_available) {
-        return g_strdup("Tool 'lynx' not found.\nInstall lynx to preview HTML files.\n\n"
-                      "On Ubuntu/Debian: sudo apt install lynx\n"
-                      "On macOS: brew install lynx\n"
-                      "On Fedora: sudo dnf install lynx");
-    }
-    return load_text_preview("lynx", "-force_html", "-dump", path);
-}
-
-char *load_text_content(const char *path, off_t max_size) {
-    FILE *f = fopen(path, "r");
-    if (!f) return NULL;
-
-    fseek(f, 0, SEEK_END);
-    long fsize = ftell(f);
-    fseek(f, 0, SEEK_SET);
-
-    if (fsize <= 0 || fsize > max_size) {
-        fclose(f);
-        return NULL;
-    }
-
-    char *buffer = malloc(fsize + 1);
-    if (!buffer) {
-        fclose(f);
-        return NULL;
-    }
-
-    size_t n = fread(buffer, 1, fsize, f);
-    fclose(f);
-
-    if (n == 0) {
-        free(buffer);
-        return NULL;
-    }
-
-    buffer[n] = '\0';
-    return buffer;
-}
-
-char *load_pdf_preview(const char *path) {
-    if (!tool_pdfinfo_available) {
-        return g_strdup("Tool 'pdfinfo' not found.\nInstall poppler-utils to preview PDF metadata.\n\n"
-                      "On Ubuntu/Debian: sudo apt install poppler-utils\n"
-                      "On macOS: brew install poppler\n"
-                      "On Fedora: sudo dnf install poppler-utils");
-    }
-    return load_text_preview("pdfinfo", NULL, NULL, path);
-}
-
-char *load_media_preview(const char *path) {
-    if (!tool_mediainfo_available) {
-        return g_strdup("Tool 'mediainfo' not found.\nInstall mediainfo to preview audio/video metadata.\n\n"
-                      "On Ubuntu/Debian: sudo apt install mediainfo\n"
-                      "On macOS: brew install mediainfo\n"
-                      "On Fedora: sudo dnf install mediainfo");
-    }
-    return load_text_preview("mediainfo", NULL, NULL, path);
-}
-
-char *load_mp3_info(const char *path) {
-    if (!tool_mp3info_available) {
-        return g_strdup("Tool 'mp3info' not found.\nInstall mp3info to preview MP3 metadata.\n\n"
-                      "On Ubuntu/Debian: sudo apt install mp3info\n"
-                      "On macOS: brew install mp3info\n"
-                      "On Fedora: sudo dnf install mp3info");
-    }
-    return load_text_preview("mp3info", "-x", NULL, path);
-}
-
