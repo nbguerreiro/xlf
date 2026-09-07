@@ -1,6 +1,6 @@
 CC ?= gcc
-PKG_CFLAGS := $(shell pkg-config --cflags cairo pangocairo pango gdk-pixbuf-2.0 gio-2.0 x11)
-PKG_LIBS := $(shell pkg-config --libs cairo pangocairo pango gdk-pixbuf-2.0 gio-2.0 x11)
+PKG_CFLAGS := $(shell pkg-config --cflags cairo pangocairo pango gdk-pixbuf-2.0 gio-2.0 x11 fontconfig)
+PKG_LIBS := $(shell pkg-config --libs cairo pangocairo pango gdk-pixbuf-2.0 gio-2.0 x11 fontconfig)
 CFLAGS ?= -std=c11 -O2 -Wall -Wextra
 CFLAGS += $(PKG_CFLAGS)
 LDFLAGS ?=
@@ -8,7 +8,7 @@ LDFLAGS += $(PKG_LIBS) -pthread
 SRC := fm.c filelist.c util.c preview.c ui.c
 BIN := fm
 
-.PHONY: all run clean sanitize lint test deps check-deps
+.PHONY: all run clean sanitize sanitize-test lint test deps check-deps
 
 all: check-deps $(BIN)
 
@@ -22,7 +22,7 @@ run: $(BIN)
 	./$(BIN)
 
 clean:
-	rm -f $(BIN) tests/test_filelist tests/test_type_detection
+	rm -f $(BIN) tests/test_filelist tests/test_type_detection tests/test_preview_helpers tests/test_filelist_sanitize tests/test_type_detection_sanitize tests/test_preview_helpers_sanitize
 
 sanitize: CFLAGS += -g -O1 -fsanitize=address,undefined -fno-omit-frame-pointer
 sanitize: clean $(BIN)
@@ -31,15 +31,35 @@ sanitize: clean $(BIN)
 lint:
 	$(CC) -fsyntax-only -Wall -Wextra $(CFLAGS) $(SRC)
 
-test: $(BIN) tests/test_filelist tests/test_type_detection
+test: $(BIN) tests/test_filelist tests/test_type_detection tests/test_preview_helpers
 	./tests/test_filelist
 	./tests/test_type_detection
+	./tests/test_preview_helpers
 
 tests/test_filelist: tests/test_filelist.c filelist.c filelist.h util.c util.h
 	$(CC) $(CFLAGS) -I. -o $@ tests/test_filelist.c filelist.c util.c
 
 tests/test_type_detection: tests/test_type_detection.c preview.c preview.h filelist.h
 	$(CC) $(CFLAGS) -ffunction-sections -fdata-sections -I. -o $@ tests/test_type_detection.c preview.c $(LDFLAGS) -Wl,--gc-sections
+
+tests/test_preview_helpers: tests/test_preview_helpers.c preview.c preview.h filelist.c filelist.h util.c util.h
+	$(CC) $(CFLAGS) -ffunction-sections -fdata-sections -I. -o $@ tests/test_preview_helpers.c preview.c filelist.c util.c $(LDFLAGS) -Wl,--gc-sections
+
+sanitize-test: CFLAGS += -g -O1 -fsanitize=address,undefined -fno-omit-frame-pointer
+sanitize-test: LDFLAGS += -fsanitize=address,undefined
+sanitize-test: clean tests/test_filelist_sanitize tests/test_type_detection_sanitize tests/test_preview_helpers_sanitize
+	./tests/test_filelist_sanitize
+	./tests/test_type_detection_sanitize
+	./tests/test_preview_helpers_sanitize
+
+tests/test_filelist_sanitize: tests/test_filelist.c filelist.c filelist.h util.c util.h
+	$(CC) $(CFLAGS) -I. -o $@ tests/test_filelist.c filelist.c util.c $(LDFLAGS)
+
+tests/test_type_detection_sanitize: tests/test_type_detection.c preview.c preview.h filelist.h
+	$(CC) $(CFLAGS) -ffunction-sections -fdata-sections -I. -o $@ tests/test_type_detection.c preview.c $(LDFLAGS) -Wl,--gc-sections
+
+tests/test_preview_helpers_sanitize: tests/test_preview_helpers.c preview.c preview.h filelist.c filelist.h util.c util.h
+	$(CC) $(CFLAGS) -ffunction-sections -fdata-sections -I. -o $@ tests/test_preview_helpers.c preview.c filelist.c util.c $(LDFLAGS) -Wl,--gc-sections
 
 deps:
 	@echo "Required system packages:"
