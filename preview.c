@@ -779,6 +779,8 @@ FileType detect_file_type_mime(const char *path) {
 }
 
 FileType detect_file_type(const char *path, const char *filename) {
+    if (!filename) return FILE_TYPE_UNKNOWN;
+
     FileType type = detect_file_type_mime(path);
 
     if (type == FILE_TYPE_IMAGE && !ENABLE_PREVIEW_IMAGE) return FILE_TYPE_UNKNOWN;
