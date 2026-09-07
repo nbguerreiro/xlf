@@ -23,11 +23,14 @@ char *path_join(const char *base, const char *name) {
 }
 
 char *get_absolute_path(const char *path) {
-    char buf[4096];
-    if (realpath(path, buf)) {
-        return strdup(buf);
+    if (!path) return NULL;
+
+    char buf[PATH_MAX];
+    if (!realpath(path, buf)) {
+        return NULL;
     }
-    return strdup(path);
+
+    return strdup(buf);
 }
 
 char *get_display_path(const char *path) {
@@ -97,7 +100,6 @@ void format_file_info(const char *path, const char *name, int is_dir,
     snprintf(buf, buf_size, "%s %ld %ld %s %s",
              perms, (long)st.st_uid, (long)st.st_gid, size_str, date_str);
 }
-
 
 int tool_lynx_available = 0;
 int tool_pdfinfo_available = 0;
