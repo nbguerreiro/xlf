@@ -23,11 +23,8 @@ char *path_join(const char *base, const char *name) {
 }
 
 char *get_absolute_path(const char *path) {
-    char buf[4096];
-    if (realpath(path, buf)) {
-        return strdup(buf);
-    }
-    return strdup(path);
+    if (!path) return NULL;
+    return realpath(path, NULL);
 }
 
 char *get_display_path(const char *path) {
