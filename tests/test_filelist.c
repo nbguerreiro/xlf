@@ -21,13 +21,18 @@ int main(void) {
     char *dir = mkdtemp(template);
     assert(dir != NULL);
 
-    char subdir[4096], file_a[4096], file_b[4096], hidden[4096];
+    char subdir[4096], sub_a[4096], sub_b[4096],
+         file_a[4096], file_b[4096], hidden[4096];
     snprintf(subdir, sizeof(subdir), "%s/subdir", dir);
+    snprintf(sub_a, sizeof(sub_a), "%s/subdir/a.txt", dir);
+    snprintf(sub_b, sizeof(sub_b), "%s/subdir/b.txt", dir);
     snprintf(file_a, sizeof(file_a), "%s/a.txt", dir);
     snprintf(file_b, sizeof(file_b), "%s/b.txt", dir);
     snprintf(hidden, sizeof(hidden), "%s/.hidden", dir);
 
     assert(mkdir(subdir, 0700) == 0);
+    make_file(sub_a);
+    make_file(sub_b);
     make_file(file_a);
     make_file(file_b);
     make_file(hidden);
@@ -71,11 +76,28 @@ int main(void) {
     assert(strcmp(list.entries[3].name, "b.txt") == 0);
     assert(!list.entries[3].is_dir);
 
+    /* Selection follows each directory when navigating away and back. */
+    list.selected = 2;
+    load_directory(&list, subdir);
+    assert(list.count == 2);
+    assert(list.selected == 0);
+
+    list.selected = 1;
+    load_directory(&list, dir);
+    assert(list.selected == 2);
+    assert(strcmp(list.entries[list.selected].name, "a.txt") == 0);
+
+    load_directory(&list, subdir);
+    assert(list.selected == 1);
+    assert(strcmp(list.entries[list.selected].name, "b.txt") == 0);
+
     free_file_list(&list);
     assert(list.entries == NULL);
     assert(list.path == NULL);
     assert(list.count == 0);
 
+    unlink(sub_b);
+    unlink(sub_a);
     unlink(hidden);
     unlink(file_b);
     unlink(file_a);
