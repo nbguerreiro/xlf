@@ -79,7 +79,7 @@ char *preview_text_content;
 int preview_is_text;
 
 // Preview loading runs on a dedicated worker so the X11 event loop stays responsive.
-PreviewResult preview_result = {0, PREVIEW_RESULT_NONE, NULL, NULL, {NULL, 0, 0, 0, NULL}, 0};
+PreviewResult preview_result = {0, PREVIEW_RESULT_NONE, NULL, NULL, {.entries = NULL, .count = 0, .capacity = 0, .selected = 0, .path = NULL, .selection_history = NULL, .selection_history_count = 0, .selection_history_capacity = 0}, 0};
 int preview_result_ready = 0;
 int preview_wake_pipe[2] = {-1, -1};
 unsigned long preview_generation = 0;
