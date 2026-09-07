@@ -12,6 +12,7 @@
 #include <fcntl.h>
 #include <errno.h>
 #include <sys/types.h>
+#include <fontconfig/fontconfig.h>
 extern FileList file_list;
 extern pthread_t preview_thread;
 extern pthread_mutex_t preview_mutex;
@@ -159,10 +160,7 @@ void clear_preview_state() {
     free_preview_media();
     free_scaled_image_cache();
 
-    if (preview_list.entries || preview_list.path) {
-        free_file_list(&preview_list);
-    }
-    init_file_list(&preview_list, ".");
+    free_file_list(&preview_list);
     preview_is_dir = 0;
 }
 
@@ -324,9 +322,10 @@ PreviewResult load_preview_result(const PreviewTask *task) {
             break;
 
         case PREVIEW_RESULT_MEDIA:
-            result.text = load_mp3_info(task->path)
-                ? load_mp3_info(task->path)
-                : load_media_preview(task->path);
+            result.text = load_mp3_info(task->path);
+            if (!result.text) {
+                result.text = load_media_preview(task->path);
+            }
             if (result.text && result.text[0] == '\0') {
                 free(result.text);
                 result.text = NULL;
