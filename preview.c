@@ -324,9 +324,10 @@ PreviewResult load_preview_result(const PreviewTask *task) {
             break;
 
         case PREVIEW_RESULT_MEDIA:
-            result.text = load_mp3_info(task->path)
-                ? load_mp3_info(task->path)
-                : load_media_preview(task->path);
+            result.text = load_mp3_info(task->path);
+            if (!result.text) {
+                result.text = load_media_preview(task->path);
+            }
             if (result.text && result.text[0] == '\0') {
                 free(result.text);
                 result.text = NULL;
@@ -667,7 +668,8 @@ void draw_image(cairo_t *cr, int x, int y, int width, int height) {
                 guint8 g = (guint8)(src[1] * a);
                 guint8 b = (guint8)(src[2] * a);
                 guint8 alpha = (guint8)(a * 255);
-                dst[px] = (alpha << 24) | (r << 16) | (g << 8) | b;
+                dst[px] = ((guint32)alpha << 24) | ((guint32)r << 16) |
+                          ((guint32)g << 8) | (guint32)b;
                 src += 4;
             }
         }
