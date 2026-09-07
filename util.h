@@ -3,6 +3,7 @@
 
 #include <sys/types.h>
 
+char *path_join(const char *base, const char *name);
 char *get_absolute_path(const char *path);
 char *get_display_path(const char *path);
 void format_file_info(const char *path, const char *name, int is_dir,
