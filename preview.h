@@ -3,6 +3,7 @@
 
 #include <cairo/cairo.h>
 #include <gdk-pixbuf/gdk-pixbuf.h>
+#include <sys/types.h>
 #include "filelist.h"
 
 typedef enum {
@@ -76,5 +77,14 @@ int start_preview_worker(void);
 void request_preview(void);
 void stop_preview_worker(void);
 FileType detect_file_type(const char *path, const char *filename);
+int is_image_file(const char *filename);
+int is_pdf_file(const char *filename);
+int is_text_file(const char *filename);
+int is_html_file(const char *filename);
+int is_mp3_file(const char *filename);
+int is_media_file(const char *filename);
+int is_small_image(const char *path, off_t max_size);
+char *load_text_preview(const char *cmd, const char *arg1, const char *arg2, const char *path);
+char *load_text_content(const char *path, off_t max_size);
 
 #endif
