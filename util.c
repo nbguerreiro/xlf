@@ -9,6 +9,19 @@
 #include <time.h>
 #include <unistd.h>
 
+char *path_join(const char *base, const char *name) {
+    if (!base || !name) return NULL;
+    size_t base_len = strlen(base);
+    size_t name_len = strlen(name);
+    int separator = base_len > 0 && base[base_len - 1] != '/';
+    char *result = malloc(base_len + (size_t)separator + name_len + 1);
+    if (!result) return NULL;
+    memcpy(result, base, base_len);
+    if (separator) result[base_len++] = '/';
+    memcpy(result + base_len, name, name_len + 1);
+    return result;
+}
+
 char *get_absolute_path(const char *path) {
     char buf[4096];
     if (realpath(path, buf)) {
