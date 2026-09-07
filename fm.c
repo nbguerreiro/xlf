@@ -24,6 +24,7 @@
 #include <pango/pangocairo.h>
 #include <gdk-pixbuf/gdk-pixbuf.h>
 #include <gio/gio.h>
+#include <fontconfig/fontconfig.h>
 
 #define BG_R 223
 #define BG_G 191
@@ -670,6 +671,7 @@ int main() {
     free_scaled_image_cache();
     free_pango_objects();
     free_draw_surfaces();
+    FcFini();
     XDestroyWindow(dpy, win);
     XCloseDisplay(dpy);
     return 0;
