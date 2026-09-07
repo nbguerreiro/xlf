@@ -38,6 +38,16 @@ int main(void) {
     assert(list.selected == 0);
     assert(list.path != NULL);
 
+    char *joined = path_join("/tmp/foo/", "bar");
+    assert(joined != NULL);
+    assert(strcmp(joined, "/tmp/foo/bar") == 0);
+    free(joined);
+
+    joined = path_join("/tmp/foo", "bar");
+    assert(joined != NULL);
+    assert(strcmp(joined, "/tmp/foo/bar") == 0);
+    free(joined);
+
     load_directory(&list, dir);
 
     /* Directories sort before regular files; hidden files are retained. */
