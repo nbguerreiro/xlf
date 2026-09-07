@@ -49,6 +49,15 @@ int main(void) {
     assert(strcmp(joined, "/tmp/foo/bar") == 0);
     free(joined);
 
+    char *absolute = get_absolute_path(dir);
+    assert(absolute != NULL);
+    assert(absolute[0] == '/');
+    assert(strcmp(absolute, dir) == 0);
+    free(absolute);
+
+    absolute = get_absolute_path("/tmp/xlf-filelist-test-does-not-exist");
+    assert(absolute == NULL);
+
     load_directory(&list, dir);
 
     /* Directories sort before regular files; hidden files are retained. */
