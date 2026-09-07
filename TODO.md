@@ -37,9 +37,9 @@
   - [x] Add README explaining dependencies and runtime behavior. (effort: small)
 
 8) Refactor / architecture (large effort)
-  - [ ] Split into modules: filelist.{c,h}, preview.{c,h}, ui.{c,h}, util.{c,h}. (effort: large)
-  - [ ] Add unit tests for file scanning and type detection. (effort: large)
-  - [ ] Add CI with sanitizers and static analysis. (effort: large)
+  - [x] Split into modules: filelist.{c,h}, preview.{c,h}, ui.{c,h}, util.{c,h}. (effort: large)
+  - [x] Add unit tests for file scanning and type detection. (effort: large)
+  - [x] Add CI with sanitizers and static analysis. (effort: large)
 
 9) Concrete small fixes called out earlier (very small → small)
   - [ ] Path join helper to avoid duplicate slashes when concatenating file_list.path and entry names. (effort: very small)
@@ -62,4 +62,4 @@ What I just implemented:
   - Users see helpful message instead of blank preview or silent failure
   - Result: improved UX with minimal overhead
 
-Progress: 13/33 items complete (39%)
+Progress: 16/33 items complete (48%)
