@@ -92,6 +92,7 @@ int search_active = 0;
 char search_query[SEARCH_MAX];
 size_t search_query_len = 0;
 int rename_active = 0;
+int app_running = 1;
 char rename_query[SEARCH_MAX];
 size_t rename_query_len = 0;
 
@@ -494,7 +495,7 @@ void handle_key(XKeyEvent *ev) {
             break;
         case XK_q:
         case XK_Escape:
-            exit(0);
+            app_running = 0;
             break;
     }
 }
@@ -546,7 +547,7 @@ int main() {
 
     request_preview();
 
-    int running = 1;
+    int running = app_running;
     int x_fd = ConnectionNumber(dpy);
 
     while (running) {
@@ -579,6 +580,7 @@ int main() {
 
                 case KeyPress:
                     handle_key(&ev.xkey);
+                    running = app_running;
                     {
                         Window root;
                         int x, y;
