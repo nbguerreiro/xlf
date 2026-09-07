@@ -48,7 +48,7 @@ Developer helpers
 
 Notes and limitations
 - Some previews rely on external programs; absence of those programs results in a status-bar notification and no preview for that type.
-- The program currently does image decoding on the main thread; large images may stall the UI. (Asynchronous preview loader is in progress.)
+- Preview loading is asynchronous; image decoding and other preview work run in the dedicated preview worker.
 - Tested on Linux with X11. Not tested on Wayland.
 
 License
