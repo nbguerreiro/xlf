@@ -297,8 +297,7 @@ PreviewResult load_preview_result(const PreviewTask *task) {
 
         case PREVIEW_RESULT_TEXT:
             if (is_small_image(task->path, 1048576)) {
-                result.text = load_text_content(task->path, 1048576);
-                if (result.text && result.text[0] == '\0') {
+                result.text = load_text_content(task->path, 1048576);                if (result.text && result.text[0] == '\0') {
                     free(result.text);
                     result.text = NULL;
                 }
@@ -597,8 +596,7 @@ void draw_preview(cairo_t *cr, int x, int y, int width, int height) {
         } else if (preview_is_html) {
             draw_html_preview(cr, x, preview_y, width, preview_height);
         } else if (preview_is_media) {
-            draw_media_preview(cr, x, preview_y, width, preview_height);
-        } else {
+            draw_media_preview(cr, x, preview_y, width, preview_height);        } else {
             char preview_text[256];
             snprintf(preview_text, sizeof(preview_text), "File: %s", file_list.entries[file_list.selected].name);
             draw_text(cr, preview_text, x + MARGIN, preview_y + MARGIN + LINE_HEIGHT, width - 2 * MARGIN, layout_normal);
@@ -897,8 +895,7 @@ int is_small_image(const char *path, off_t max_size) {
     return st.st_size <= max_size;
 }
 
-static int valid_preview_path(const char *path) {
-    if (!path || path[0] == '\0') return 0;
+static int valid_preview_path(const char *path) {    if (!path || path[0] == '\0') return 0;
 
     // exec-family calls do not invoke a shell, but control characters in a
     // pathname can still confuse helper programs or produce unsafe output.
@@ -997,3 +994,78 @@ char *load_text_preview(const char *cmd, const char *arg1, const char *arg2, con
         free(buffer);
         return NULL;
     }
+
+    buffer[total] = '\0';
+    return buffer;
+}
+
+char *load_html_preview(const char *path) {
+    if (!tool_lynx_available) {
+        return g_strdup("Tool 'lynx' not found.\nInstall lynx to preview HTML files.\n\n"
+                      "On Ubuntu/Debian: sudo apt install lynx\n"
+                      "On macOS: brew install lynx\n"
+                      "On Fedora: sudo dnf install lynx");
+    }
+    return load_text_preview("lynx", "-force_html", "-dump", path);
+}
+
+char *load_text_content(const char *path, off_t max_size) {
+    FILE *f = fopen(path, "r");
+    if (!f) return NULL;
+
+    fseek(f, 0, SEEK_END);
+    long fsize = ftell(f);
+    fseek(f, 0, SEEK_SET);
+
+    if (fsize <= 0 || fsize > max_size) {
+        fclose(f);
+        return NULL;
+    }
+
+    char *buffer = malloc(fsize + 1);
+    if (!buffer) {
+        fclose(f);
+        return NULL;
+    }
+
+    size_t n = fread(buffer, 1, fsize, f);
+    fclose(f);
+
+    if (n == 0) {
+        free(buffer);
+        return NULL;
+    }
+
+    buffer[n] = '\0';
+    return buffer;
+}
+
+char *load_pdf_preview(const char *path) {
+    if (!tool_pdfinfo_available) {
+        return g_strdup("Tool 'pdfinfo' not found.\nInstall poppler-utils to preview PDF metadata.\n\n"
+                      "On Ubuntu/Debian: sudo apt install poppler-utils\n"
+                      "On macOS: brew install poppler\n"
+                      "On Fedora: sudo dnf install poppler-utils");
+    }
+    return load_text_preview("pdfinfo", NULL, NULL, path);
+}
+
+char *load_media_preview(const char *path) {
+    if (!tool_mediainfo_available) {
+        return g_strdup("Tool 'mediainfo' not found.\nInstall mediainfo to preview audio/video metadata.\n\n"
+                      "On Ubuntu/Debian: sudo apt install mediainfo\n"
+                      "On macOS: brew install mediainfo\n"
+                      "On Fedora: sudo dnf install mediainfo");
+    }
+    return load_text_preview("mediainfo", NULL, NULL, path);
+}
+
+char *load_mp3_info(const char *path) {
+    if (!tool_mp3info_available) {
+        return g_strdup("Tool 'mp3info' not found.\nInstall mp3info to preview MP3 metadata.\n\n"
+                      "On Ubuntu/Debian: sudo apt install mp3info\n"
+                      "On macOS: brew install mp3info\n"
+                      "On Fedora: sudo dnf install mp3info");
+    }
+    return load_text_preview("mp3info", "-x", NULL, path);
+}
