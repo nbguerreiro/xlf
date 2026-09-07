@@ -4,7 +4,7 @@ PKG_LIBS := $(shell pkg-config --libs cairo pangocairo pango gdk-pixbuf-2.0 gio-
 CFLAGS ?= -std=c11 -O2 -Wall -Wextra
 CFLAGS += $(PKG_CFLAGS)
 LDFLAGS ?=
-LDFLAGS += $(PKG_LIBS) -pthread
+LDFLAGS += $(PKG_LIBS) -lfontconfig -pthread
 SRC := fm.c filelist.c util.c preview.c ui.c
 BIN := fm
 
