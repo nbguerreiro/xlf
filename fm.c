@@ -394,7 +394,10 @@ static void handle_search_key(XKeyEvent *ev, KeySym ks) {
 }
 
 void handle_key(XKeyEvent *ev) {
-    KeySym ks = XLookupKeysym(ev, 0);
+    char input[32];
+    KeySym ks;
+    int input_len = XLookupString(ev, input, sizeof(input), &ks, NULL);
+    (void)input_len;
 
     if (rename_active) {
         handle_rename_key(ev, ks);

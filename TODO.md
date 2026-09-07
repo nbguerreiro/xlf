@@ -44,7 +44,7 @@
 9) Concrete small fixes called out earlier (very small → small)
   - [x] Path join helper to avoid duplicate slashes when concatenating file_list.path and entry names. (effort: very small)
   - [x] get_absolute_path: return NULL on realpath failure instead of returning a non-absolute fallback. (effort: small)
-  - [ ] Minor key-handling improvements: use XLookupString/Xkb to handle modifiers and international layouts. (effort: small)
+  - [x] Minor key-handling improvements: use XLookupString/Xkb to handle modifiers and international layouts. (effort: small)
 
 Which item should I implement next?
 - Recommended: **4.1: Replace extension-only detection with libmagic or GFileInfo** (medium effort, improves accuracy)
