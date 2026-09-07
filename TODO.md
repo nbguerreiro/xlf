@@ -46,20 +46,9 @@
   - [x] get_absolute_path: return NULL on realpath failure instead of returning a non-absolute fallback. (effort: small)
   - [x] Minor key-handling improvements: use XLookupString/Xkb to handle modifiers and international layouts. (effort: small)
 
-Which item should I implement next?
-- Recommended: **4.1: Replace extension-only detection with libmagic or GFileInfo** (medium effort, improves accuracy)
-  - Current approach only checks file extensions, which can be unreliable
-  - libmagic (via magic.h) reads file "magic bytes" to detect MIME type more accurately
-  - Alternative: GFileInfo API (glib) wraps libmagic and is less verbose
-  - Benefit: .txt files without extension, mis-named files, etc. are correctly identified
-  - Can fall back to extension-based detection if libmagic unavailable
-  - Wrap calls with availability checks like 4.2 did for external tools
 
-What I just implemented:
-- **4.2: Graceful fallback for missing external tools** – detect lynx/pdfinfo/mediainfo/mp3info at startup
-  - Tool availability checked once in main() before UI loop
-  - When tool missing, display installation instructions for Ubuntu/Debian/macOS/Fedora
-  - Users see helpful message instead of blank preview or silent failure
-  - Result: improved UX with minimal overhead
+## Current status
 
-Progress: 16/33 items complete (48%)
+The original TODO list is complete through item 9.3. All 19 listed implementation items are marked complete.
+
+The remaining work is maintenance and future feature development rather than unfinished items from this checklist.
