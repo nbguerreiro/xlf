@@ -43,7 +43,7 @@
 
 9) Concrete small fixes called out earlier (very small → small)
   - [x] Path join helper to avoid duplicate slashes when concatenating file_list.path and entry names. (effort: very small)
-  - [ ] get_absolute_path: consider returning NULL on realpath failure or try to normalize differently (avoid returning non-absolute). (effort: small)
+  - [x] get_absolute_path: return NULL on realpath failure instead of returning a non-absolute fallback. (effort: small)
   - [ ] Minor key-handling improvements: use XLookupString/Xkb to handle modifiers and international layouts. (effort: small)
 
 Which item should I implement next?
