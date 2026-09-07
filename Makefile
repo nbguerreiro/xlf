@@ -1,5 +1,5 @@
 CC ?= gcc
-PKG_CFLAGS := $(shell pkg-config --cflags cairo pangocairo pango gdk-pixbuf-2.0 gio-2.0 x11)
+PKG_CFLAGS := $(shell pkg-config --cflags cairo pangocairo pango gdk-pixbuf-2.0 gio-2.0 x11 fontconfig)
 PKG_LIBS := $(shell pkg-config --libs cairo pangocairo pango gdk-pixbuf-2.0 gio-2.0 x11)
 CFLAGS ?= -std=c11 -O2 -Wall -Wextra
 CFLAGS += $(PKG_CFLAGS)
@@ -13,7 +13,7 @@ BIN := fm
 all: check-deps $(BIN)
 
 check-deps:
-	@pkg-config --exists cairo pangocairo pango gdk-pixbuf-2.0 gio-2.0 x11 || (echo "Missing required pkg-config dependencies: cairo pangocairo pango gdk-pixbuf-2.0 gio-2.0 x11"; exit 1)
+	@pkg-config --exists cairo pangocairo pango gdk-pixbuf-2.0 gio-2.0 x11 fontconfig || (echo "Missing required pkg-config dependencies: cairo pangocairo pango gdk-pixbuf-2.0 gio-2.0 x11"; exit 1)
 
 $(BIN): $(SRC)
 	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
