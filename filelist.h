@@ -9,11 +9,19 @@ typedef struct {
 } FileEntry;
 
 typedef struct {
+    char *path;
+    char *name;
+} SelectionMemory;
+
+typedef struct {
     FileEntry *entries;
     int count;
     int capacity;
     int selected;
     char *path;
+    SelectionMemory *selection_history;
+    size_t selection_history_count;
+    size_t selection_history_capacity;
 } FileList;
 
 void init_file_list(FileList *list, const char *path);
