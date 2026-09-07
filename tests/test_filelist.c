@@ -39,6 +39,14 @@ int main(void) {
     assert(list.selected == 0);
     assert(list.path != NULL);
 
+    char *absolute = get_absolute_path(".");
+    assert(absolute != NULL);
+    assert(absolute[0] == '/');
+    free(absolute);
+
+    absolute = get_absolute_path("/tmp/xlf-filelist-test-does-not-exist");
+    assert(absolute == NULL);
+
     char *joined = path_join("/tmp/foo/", "bar");
     assert(joined != NULL);
     assert(strcmp(joined, "/tmp/foo/bar") == 0);
