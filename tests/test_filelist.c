@@ -1,5 +1,6 @@
 #define _POSIX_C_SOURCE 200809L
 #include "filelist.h"
+#include "util.h"
 
 #include <assert.h>
 #include <stdio.h>
@@ -37,6 +38,16 @@ int main(void) {
     assert(list.count == 0);
     assert(list.selected == 0);
     assert(list.path != NULL);
+
+    char *joined = path_join("/tmp/foo/", "bar");
+    assert(joined != NULL);
+    assert(strcmp(joined, "/tmp/foo/bar") == 0);
+    free(joined);
+
+    joined = path_join("/tmp/foo", "bar");
+    assert(joined != NULL);
+    assert(strcmp(joined, "/tmp/foo/bar") == 0);
+    free(joined);
 
     load_directory(&list, dir);
 

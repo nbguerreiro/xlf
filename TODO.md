@@ -42,7 +42,7 @@
   - [x] Add CI with sanitizers and static analysis. (effort: large)
 
 9) Concrete small fixes called out earlier (very small → small)
-  - [ ] Path join helper to avoid duplicate slashes when concatenating file_list.path and entry names. (effort: very small)
+  - [x] Path join helper to avoid duplicate slashes when concatenating file_list.path and entry names. (effort: very small)
   - [ ] get_absolute_path: consider returning NULL on realpath failure or try to normalize differently (avoid returning non-absolute). (effort: small)
   - [ ] Minor key-handling improvements: use XLookupString/Xkb to handle modifiers and international layouts. (effort: small)
 

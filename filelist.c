@@ -1,8 +1,8 @@
 #define _POSIX_C_SOURCE 200809L
 #include "filelist.h"
+#include "util.h"
 
 #include <dirent.h>
-#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -67,12 +67,8 @@ void load_directory(FileList *list, const char *path) {
                 continue;
             }
 
-            char fullpath[PATH_MAX];
-            int n = snprintf(fullpath, sizeof(fullpath), "%s/%s",
-                             path, ent->d_name);
-            if (n < 0 || (size_t)n >= sizeof(fullpath)) {
-                continue;
-            }
+            char *fullpath = path_join(path, ent->d_name);
+            if (!fullpath) continue;
 
             if (stat(fullpath, &st) == 0) {
                 if (list->count >= list->capacity) {
@@ -93,6 +89,7 @@ void load_directory(FileList *list, const char *path) {
                 list->entries[list->count].is_dir = S_ISDIR(st.st_mode);
                 list->count++;
             }
+            free(fullpath);
         }
         closedir(dir);
     }
