@@ -4,13 +4,13 @@
 #include <stddef.h>
 
 /*
- * External commands shown by the ':' command menu.
+ * External commands added to fm's unified ':' command menu.
  *
- * name    - name shown in dmenu
+ * name    - command name shown in dmenu
  * command - executable/script name, resolved through PATH
  * key     - optional shortcut, e.g. "C-i"; use NULL for none
  *
- * The selected file's absolute path is passed as argv[1].
+ * The selected file's path is passed as argv[1].
  *
  * Example:
  *     {"com", "com.sh", "C-i"},
@@ -26,7 +26,9 @@ static const ExternalCommand external_commands[] = {
     {NULL, NULL, NULL}
 };
 
-#define EXTERNAL_COMMAND_COUNT \
-    (sizeof(external_commands) / sizeof(external_commands[0]) - 1)
+enum {
+    EXTERNAL_COMMAND_COUNT =
+        (int)(sizeof(external_commands) / sizeof(external_commands[0]) - 1)
+};
 
 #endif
