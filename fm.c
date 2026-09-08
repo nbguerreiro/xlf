@@ -507,16 +507,30 @@ static const ExternalCommand *find_external_command(const char *name) {
     return NULL;
 }
 
-static int command_key_matches(const char *key, KeySym ks, unsigned int state) {
+static int command_key_matches(const char *key, KeySym ks,
+                                   unsigned int state,
+                                   const char *input, int input_len) {
     if (!key) return 0;
 
     if (strncmp(key, "C-", 2) == 0 &&
         key[2] != '\0' && key[3] == '\0') {
-        char ch = key[2];
-        KeySym expected = (KeySym)(unsigned char)ch;
-        if (ch >= 'a' && ch <= 'z') expected = (KeySym)(ch - 'a' + 'A');
-        return (state & ControlMask) != 0 &&
-               (ks == expected || ks == expected + ('a' - 'A'));
+        unsigned char ch = (unsigned char)key[2];
+        if (ch >= 'a' && ch <= 'z') ch = (unsigned char)(ch - 'a' + 'A');
+        if ((state & ControlMask) == 0) return 0;
+
+        /*
+         * XLookupString translates some control combinations to a different
+         * KeySym (C-i becomes Tab, C-m becomes Return, etc.). Compare the
+         * translated input byte as well as the KeySym so config entries such
+         * as "C-i" work consistently.
+         */
+        if (input && input_len > 0 &&
+            (unsigned char)input[0] == (unsigned char)(ch & 0x1f)) {
+            return 1;
+        }
+
+        KeySym expected = (KeySym)ch;
+        return ks == expected || ks == (KeySym)(ch + ('a' - 'A'));
     }
 
     if (strcmp(key, "Del") == 0) return ks == XK_Delete;
@@ -854,13 +868,13 @@ void handle_key(XKeyEvent *ev) {
         /* j/k remain direct navigation keys rather than command-menu actions. */
     } else {
         for (size_t i = 0; i < INTERNAL_COMMAND_COUNT; ++i) {
-            if (command_key_matches(internal_commands[i].key, ks, ev->state)) {
+            if (command_key_matches(internal_commands[i].key, ks, ev->state, input, input_len)) {
                 internal_commands[i].handler();
                 return;
             }
         }
         for (size_t i = 0; external_commands[i].name != NULL; ++i) {
-            if (command_key_matches(external_commands[i].key, ks, ev->state)) {
+            if (command_key_matches(external_commands[i].key, ks, ev->state, input, input_len)) {
                 run_external_command(&external_commands[i]);
                 return;
             }
