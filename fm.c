@@ -5,7 +5,8 @@
 #include "util.h"
 #include "preview.h"
 #include "ui.h"
-#include "commands.h"\n#include "history.h"
+#include "commands.h"
+#include "history.h"
 #include <stdlib.h>
 #include <string.h>
 #include <strings.h>
