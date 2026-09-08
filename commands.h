@@ -1,6 +1,8 @@
 #ifndef COMMANDS_H
 #define COMMANDS_H
 
+#include <stddef.h>
+
 /*
  * External commands shown by the ':' command menu.
  *
