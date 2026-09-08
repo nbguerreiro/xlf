@@ -477,6 +477,7 @@ static void command_search(void);
 static void command_parent(void);
 static void command_enter(void);
 static void command_history(void);
+static void run_command(const char *name);
 
 static const InternalCommand internal_commands[] = {
     {"open", "o", open_selected_file},
