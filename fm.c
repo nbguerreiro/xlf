@@ -367,7 +367,6 @@ static int parse_dmenu_argv(char ***argv_out, size_t *argc_out) {
             return -1;
         }
         argv = grown;
-        capacity = argc + 3;
     }
 
     argv[argc] = strdup("-w");
