@@ -471,6 +471,33 @@ static char *run_dmenu(const char *input) {
     return strdup(result);
 }
 
+typedef void (*InternalCommandHandler)(void);
+
+typedef struct {
+    const char *name;
+    const char *key;
+    InternalCommandHandler handler;
+} InternalCommand;
+
+static void open_selected_file(void);
+static void command_rename(void);
+static void command_search(void);
+static void command_parent(void);
+static void command_enter(void);
+
+static const InternalCommand internal_commands[] = {
+    {"open", "o", open_selected_file},
+    {"rename", "r", command_rename},
+    {"delete", NULL, delete_selected_file},
+    {"trash", NULL, trash_selected_file},
+    {"search", "/", command_search},
+    {"parent", "h", command_parent},
+    {"enter", "l", command_enter}
+};
+
+#define INTERNAL_COMMAND_COUNT \
+    (sizeof(internal_commands) / sizeof(internal_commands[0]))
+
 static const ExternalCommand *find_external_command(const char *name) {
     for (size_t i = 0; i < EXTERNAL_COMMAND_COUNT; ++i) {
         if (external_commands[i].name &&
@@ -479,6 +506,25 @@ static const ExternalCommand *find_external_command(const char *name) {
         }
     }
     return NULL;
+}
+
+static int command_key_matches(const char *key, KeySym ks, unsigned int state) {
+    if (!key) return 0;
+
+    if (strncmp(key, "C-", 2) == 0 &&
+        key[2] != '\0' && key[3] == '\0') {
+        char ch = key[2];
+        KeySym expected = (KeySym)(unsigned char)ch;
+        if (ch >= 'a' && ch <= 'z') expected = (KeySym)(ch - 'a' + 'A');
+        return (state & ControlMask) != 0 &&
+               (ks == expected || ks == expected + ('a' - 'A'));
+    }
+
+    if (strcmp(key, "Del") == 0) return ks == XK_Delete;
+    if (strcmp(key, "BackSpace") == 0) return ks == XK_BackSpace;
+
+    return key[0] != '\0' && key[1] == '\0' &&
+           ks == (KeySym)(unsigned char)key[0];
 }
 
 static void run_external_command(const ExternalCommand *command) {
@@ -507,13 +553,49 @@ static void run_external_command(const ExternalCommand *command) {
     set_status(command->name ? command->name : "Command started");
 }
 
-static void show_external_command_menu(void) {
-    if (EXTERNAL_COMMAND_COUNT == 0) {
-        set_status("No external commands configured");
+static const InternalCommand *find_internal_command(const char *name) {
+    for (size_t i = 0; i < INTERNAL_COMMAND_COUNT; ++i) {
+        if (strcmp(internal_commands[i].name, name) == 0) {
+            return &internal_commands[i];
+        }
+    }
+    return NULL;
+}
+
+static void run_command(const char *name) {
+    const InternalCommand *internal = find_internal_command(name);
+    if (internal) {
+        internal->handler();
         return;
     }
 
+    const ExternalCommand *external = find_external_command(name);
+    if (external) {
+        run_external_command(external);
+    }
+}
+
+static void run_command_key(KeySym ks, unsigned int state) {
+    for (size_t i = 0; i < INTERNAL_COMMAND_COUNT; ++i) {
+        if (command_key_matches(internal_commands[i].key, ks, state)) {
+            internal_commands[i].handler();
+            return;
+        }
+    }
+
+    for (size_t i = 0; i < EXTERNAL_COMMAND_COUNT; ++i) {
+        if (command_key_matches(external_commands[i].key, ks, state)) {
+            run_external_command(&external_commands[i]);
+            return;
+        }
+    }
+}
+
+static void show_command_menu(void) {
     size_t capacity = 1;
+    for (size_t i = 0; i < INTERNAL_COMMAND_COUNT; ++i) {
+        capacity += strlen(internal_commands[i].name) + 1;
+    }
     for (size_t i = 0; i < EXTERNAL_COMMAND_COUNT; ++i) {
         if (external_commands[i].name) {
             capacity += strlen(external_commands[i].name) + 1;
@@ -524,6 +606,12 @@ static void show_external_command_menu(void) {
     if (!menu) return;
 
     size_t offset = 0;
+    for (size_t i = 0; i < INTERNAL_COMMAND_COUNT; ++i) {
+        size_t len = strlen(internal_commands[i].name);
+        memcpy(menu + offset, internal_commands[i].name, len);
+        offset += len;
+        menu[offset++] = '\n';
+    }
     for (size_t i = 0; i < EXTERNAL_COMMAND_COUNT; ++i) {
         if (!external_commands[i].name) continue;
         size_t len = strlen(external_commands[i].name);
@@ -537,35 +625,8 @@ static void show_external_command_menu(void) {
     free(menu);
     if (!selection) return;
 
-    const ExternalCommand *command = find_external_command(selection);
-    if (command) {
-        run_external_command(command);
-    }
+    run_command(selection);
     free(selection);
-}
-
-static int external_command_key_matches(const ExternalCommand *command,
-                                         KeySym ks, unsigned int state) {
-    if (!command || !command->key) return 0;
-
-    if (strncmp(command->key, "C-", 2) == 0 &&
-        command->key[2] != '\0' && command->key[3] == '\0') {
-        char key = command->key[2];
-        KeySym expected = (KeySym)(unsigned char)key;
-        if (key >= 'a' && key <= 'z') expected = (KeySym)(key - 'a' + 'A');
-        return (state & ControlMask) != 0 && (ks == expected || ks == expected + ('a' - 'A'));
-    }
-
-    return 0;
-}
-
-static void run_external_command_key(KeySym ks, unsigned int state) {
-    for (size_t i = 0; i < EXTERNAL_COMMAND_COUNT; ++i) {
-        if (external_command_key_matches(&external_commands[i], ks, state)) {
-            run_external_command(&external_commands[i]);
-            return;
-        }
-    }
 }
 
 static void open_file_with_xdg(const char *path) {
@@ -623,87 +684,103 @@ void handle_mouse_button(const XButtonEvent *ev, int win_width, int win_height) 
     }
 }
 
-static void begin_rename(void) {
+static int valid_new_name(const char *name) {
+    if (!name || name[0] == '\0') return 0;
+    for (const unsigned char *p = (const unsigned char *)name; *p; ++p) {
+        if (*p == '/' || *p < 0x20 || *p == 0x7f) return 0;
+    }
+    return 1;
+}
+
+static void command_rename(void) {
     if (file_list.count <= 0) return;
+
     const FileEntry *entry = &file_list.entries[file_list.selected];
     if (strcmp(entry->name, "..") == 0) return;
 
-    rename_active = 1;
-    rename_query_len = strlen(entry->name);
-    if (rename_query_len >= SEARCH_MAX) rename_query_len = SEARCH_MAX - 1;
-    memcpy(rename_query, entry->name, rename_query_len);
-    rename_query[rename_query_len] = '\0';
-}
+    char *new_name = run_dmenu(entry->name);
+    if (!new_name || !valid_new_name(new_name)) {
+        free(new_name);
+        return;
+    }
 
-static void finish_rename(int accept) {
-    if (!rename_active) return;
-    rename_active = 0;
-    if (!accept || rename_query_len == 0) return;
-
-    const FileEntry *entry = &file_list.entries[file_list.selected];
-    if (strcmp(entry->name, rename_query) == 0) return;
-
-    for (const unsigned char *p = (const unsigned char *)rename_query; *p; ++p) {
-        if (*p == '/' || *p < 0x20 || *p == 0x7f) return;
+    if (strcmp(entry->name, new_name) == 0) {
+        free(new_name);
+        return;
     }
 
     char old_path[PATH_MAX], new_path[PATH_MAX];
     int n = snprintf(old_path, sizeof(old_path), "%s/%s", file_list.path, entry->name);
-    if (n < 0 || (size_t)n >= sizeof(old_path)) return;
-    n = snprintf(new_path, sizeof(new_path), "%s/%s", file_list.path, rename_query);
-    if (n < 0 || (size_t)n >= sizeof(new_path)) return;
+    if (n < 0 || (size_t)n >= sizeof(old_path)) {
+        free(new_name);
+        return;
+    }
+    n = snprintf(new_path, sizeof(new_path), "%s/%s", file_list.path, new_name);
+    if (n < 0 || (size_t)n >= sizeof(new_path)) {
+        free(new_name);
+        return;
+    }
 
     if (rename(old_path, new_path) == 0) {
-        // load_directory() replaces list->path, so don't pass file_list.path
-        // directly: it frees that string before duplicating the new path.
         char current_path[PATH_MAX];
         int path_len = snprintf(current_path, sizeof(current_path), "%s", file_list.path);
-        if (path_len < 0 || (size_t)path_len >= sizeof(current_path)) return;
-
-        load_directory(&file_list, current_path);
-
-        // Keep the renamed entry selected so the preview and path bar update
-        // to the new name immediately.
-        file_list.selected = 0;
-        for (int i = 0; i < file_list.count; ++i) {
-            if (strcmp(file_list.entries[i].name, rename_query) == 0) {
-                file_list.selected = i;
-                break;
+        if (path_len >= 0 && (size_t)path_len < sizeof(current_path)) {
+            load_directory(&file_list, current_path);
+            file_list.selected = 0;
+            for (int i = 0; i < file_list.count; ++i) {
+                if (strcmp(file_list.entries[i].name, new_name) == 0) {
+                    file_list.selected = i;
+                    break;
+                }
             }
-        }
-        if (file_list.count > 0) {
-            request_preview();
+            if (file_list.count > 0) request_preview();
         }
     }
+
+    free(new_name);
 }
 
-static void handle_rename_key(XKeyEvent *ev, KeySym ks) {
-    if (ks == XK_Escape) {
-        finish_rename(0);
-        return;
-    }
-    if (ks == XK_Return || ks == XK_KP_Enter) {
-        finish_rename(1);
-        return;
-    }
-    if (ks == XK_BackSpace) {
-        if (rename_query_len > 0) rename_query[--rename_query_len] = '\0';
-        return;
-    }
+static void command_search(void) {
+    search_active = 1;
+    search_query_len = 0;
+    search_query[0] = '\0';
+}
 
-    char input[SEARCH_MAX];
-    KeySym translated;
-    int n = XLookupString(ev, input, sizeof(input) - 1, &translated, NULL);
-    if (n <= 0 || rename_query_len + (size_t)n >= SEARCH_MAX) return;
-
-    for (int i = 0; i < n; ++i) {
-        unsigned char ch = (unsigned char)input[i];
-        if (ch < 0x20 || ch == 0x7f || ch == '/') return;
+static void command_parent(void) {
+    if (strcmp(file_list.path, ".") == 0) {
+        load_directory(&file_list, "..");
+    } else if (strcmp(file_list.path, "/") != 0) {
+        const char *last_slash = strrchr(file_list.path, '/');
+        char parent_path[PATH_MAX];
+        if (last_slash && last_slash > file_list.path) {
+            size_t len = (size_t)(last_slash - file_list.path);
+            if (len >= sizeof(parent_path)) return;
+            memcpy(parent_path, file_list.path, len);
+            parent_path[len] = '\0';
+        } else {
+            snprintf(parent_path, sizeof(parent_path), ".");
+        }
+        load_directory(&file_list, parent_path);
     }
+    request_preview();
+}
 
-    memcpy(rename_query + rename_query_len, input, (size_t)n);
-    rename_query_len += (size_t)n;
-    rename_query[rename_query_len] = '\0';
+static void command_enter(void) {
+    if (file_list.count <= 0) return;
+
+    const FileEntry *entry = &file_list.entries[file_list.selected];
+    if (entry->is_dir) {
+        char new_path[PATH_MAX];
+        int n = snprintf(new_path, sizeof(new_path), "%s/%s",
+                         file_list.path, entry->name);
+        if (n >= 0 && (size_t)n < sizeof(new_path) &&
+            strcmp(entry->name, "..") != 0) {
+            load_directory(&file_list, new_path);
+            request_preview();
+        }
+    } else {
+        open_selected_file();
+    }
 }
 
 static void open_selected_file(void) {
@@ -801,26 +878,26 @@ void handle_key(XKeyEvent *ev) {
         return;
     }
 
+    if (ks == XK_j || ks == XK_k) {
+        /* j/k remain direct navigation keys rather than command-menu actions. */
+    } else {
+        for (size_t i = 0; i < INTERNAL_COMMAND_COUNT; ++i) {
+            if (command_key_matches(internal_commands[i].key, ks, ev->state)) {
+                internal_commands[i].handler();
+                return;
+            }
+        }
+        for (size_t i = 0; i < EXTERNAL_COMMAND_COUNT; ++i) {
+            if (command_key_matches(external_commands[i].key, ks, ev->state)) {
+                run_external_command(&external_commands[i]);
+                return;
+            }
+        }
+    }
+
     switch (ks) {
         case XK_colon:
-            show_external_command_menu();
-            break;
-        case XK_slash:
-            search_active = 1;
-            search_query_len = 0;
-            search_query[0] = '\0';
-            break;
-        case XK_o:
-            open_selected_file();
-            break;
-        case XK_r:
-            begin_rename();
-            break;
-        case XK_Delete:
-            delete_selected_file();
-            break;
-        case XK_BackSpace:
-            trash_selected_file();
+            show_command_menu();
             break;
         case XK_j:
             if (file_list.count > 0) {
@@ -840,48 +917,7 @@ void handle_key(XKeyEvent *ev) {
                 }
             }
             break;
-        case XK_l:
-            if (file_list.count > 0) {
-                const FileEntry *entry = &file_list.entries[file_list.selected];
-
-                if (entry->is_dir) {
-                    char new_path[PATH_MAX];
-                    int n = snprintf(new_path, sizeof(new_path), "%s/%s",
-                                     file_list.path, entry->name);
-                    if (n >= 0 && (size_t)n < sizeof(new_path) &&
-                        strcmp(entry->name, "..") != 0) {
-                        load_directory(&file_list, new_path);
-                        request_preview();
-                    }
-                } else {
-                    open_selected_file();
-                }
-            }
-            break;
-        case XK_h:
-            // Go to parent directory
-            if (strcmp(file_list.path, ".") == 0) {
-                // Current directory is ".", go to ".."
-                load_directory(&file_list, "..");
-            } else if (strcmp(file_list.path, "/") == 0) {
-                // Already at root, do nothing
-                ;
-            } else {
-                const char *last_slash = strrchr(file_list.path, '/');
-                char parent_path[4096];
-                if (last_slash && last_slash > file_list.path) {
-                    // Remove everything after last slash
-                    int len = last_slash - file_list.path;
-                    strncpy(parent_path, file_list.path, len);
-                    parent_path[len] = '\0';
-                } else {
-                    // Path doesn't contain slash (shouldn't happen if not "." or "/")
-                    snprintf(parent_path, sizeof(parent_path), ".");
-                }
-                load_directory(&file_list, parent_path);
-            }
-            request_preview();
-            break;
+        /* h/l are handled by the unified command dispatcher. */
         case XK_q:
         case XK_Escape:
             exit(0);
@@ -998,67 +1034,3 @@ int main() {
         if (preview_wake_pipe[0] >= 0) {
             char buffer[64];
             ssize_t n;
-            while ((n = read(preview_wake_pipe[0], buffer, sizeof(buffer))) > 0) {
-                (void)n;
-                apply_preview_result();
-                preview_applied = 1;
-            }
-        }
-
-        // The wake pipe may become readable between X event processing and
-        // select(). If we consume it here, redraw immediately instead of
-        // waiting for another X event (for example, a focus change).
-        if (preview_applied) {
-            Window root;
-            int x, y;
-            unsigned int width, height, border, depth;
-            XGetGeometry(dpy, win, &root, &x, &y, &width, &height, &border, &depth);
-            draw_ui(width, height);
-        }
-
-        fd_set readfds;
-        FD_ZERO(&readfds);
-        FD_SET(x_fd, &readfds);
-        int max_fd = x_fd;
-
-        if (preview_wake_pipe[0] >= 0) {
-            FD_SET(preview_wake_pipe[0], &readfds);
-            if (preview_wake_pipe[0] > max_fd) max_fd = preview_wake_pipe[0];
-        }
-
-        if (select(max_fd + 1, &readfds, NULL, NULL, NULL) < 0) {
-            if (errno == EINTR) continue;
-            break;
-        }
-
-        if (preview_wake_pipe[0] >= 0 && FD_ISSET(preview_wake_pipe[0], &readfds)) {
-            char buffer[64];
-            while (read(preview_wake_pipe[0], buffer, sizeof(buffer)) > 0) {
-                apply_preview_result();
-            }
-
-            Window root;
-            int x, y;
-            unsigned int width, height, border, depth;
-            XGetGeometry(dpy, win, &root, &x, &y, &width, &height, &border, &depth);
-            draw_ui(width, height);
-        }
-    }
-
-    stop_preview_worker();
-
-    free_file_list(&file_list);
-    free_file_list(&preview_list);
-    free_preview_image();
-    free_preview_html();
-    free_preview_pdf();
-    free_preview_text();
-    free_preview_media();
-    free_scaled_image_cache();
-    free_pango_objects();
-    free_draw_surfaces();
-    FcFini();
-    XDestroyWindow(dpy, win);
-    XCloseDisplay(dpy);
-    return 0;
-}
