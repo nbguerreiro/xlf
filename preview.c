@@ -729,7 +729,8 @@ void draw_image(cairo_t *cr, int x, int y, int width, int height) {
             guint8 g = (guint8)(src[1] * a);
             guint8 b = (guint8)(src[2] * a);
             guint8 alpha = (guint8)(a * 255);
-            dst[px] = ((guint32)alpha << 24) | ((guint32)r << 16) |\n                      ((guint32)g << 8) | (guint32)b;
+            dst[px] = ((guint32)alpha << 24) | ((guint32)r << 16) |
+                      ((guint32)g << 8) | (guint32)b;
             src += 4;
         }
     }
