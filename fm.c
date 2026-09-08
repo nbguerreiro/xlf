@@ -26,6 +26,7 @@
 #include <gdk-pixbuf/gdk-pixbuf.h>
 #include <gio/gio.h>
 #include <fontconfig/fontconfig.h>
+#include <wordexp.h>
 
 #define BG_R 223
 #define BG_G 191
@@ -251,13 +252,13 @@ static char *run_dmenu(const char *input) {
     size_t argc = 0;
     if (parse_dmenu_argv(&argv, &argc) != 0) return NULL;
 
-    int input_pipe[2];
-    int output_pipe[2];
+    int input_pipe[2] = {-1, -1};
+    int output_pipe[2] = {-1, -1};
     if (pipe(input_pipe) != 0 || pipe(output_pipe) != 0) {
-        if (input_pipe[0] >= 0) {
-            close(input_pipe[0]);
-            close(input_pipe[1]);
-        }
+        if (input_pipe[0] >= 0) close(input_pipe[0]);
+        if (input_pipe[1] >= 0) close(input_pipe[1]);
+        if (output_pipe[0] >= 0) close(output_pipe[0]);
+        if (output_pipe[1] >= 0) close(output_pipe[1]);
         free_dmenu_argv(argv, argc);
         return NULL;
     }
