@@ -158,15 +158,23 @@ static void refresh_after_file_change(int old_selected) {
 static void delete_selected_file(void) {
     if (file_list.count <= 0) return;
 
-    const FileEntry *entry = &file_list.entries[file_list.selected];
-    if (strcmp(entry->name, "..") == 0) return;
-
-    char path[PATH_MAX];
-    int n = snprintf(path, sizeof(path), "%s/%s", file_list.path, entry->name);
-    if (n < 0 || (size_t)n >= sizeof(path)) return;
-
+    int marked_count = count_marked_files(&file_list);
     int old_selected = file_list.selected;
-    if (remove_tree(path) == 0) {
+    int changed = 0;
+
+    for (int i = 0; i < file_list.count; ++i) {
+        if (marked_count > 0 && !file_list.entries[i].marked) continue;
+        if (strcmp(file_list.entries[i].name, "..") == 0) continue;
+
+        char path[PATH_MAX];
+        int n = snprintf(path, sizeof(path), "%s/%s",
+                         file_list.path, file_list.entries[i].name);
+        if (n < 0 || (size_t)n >= sizeof(path)) continue;
+
+        if (remove_tree(path) == 0) changed = 1;
+    }
+
+    if (changed) {
         refresh_after_file_change(old_selected);
     }
 }
@@ -174,16 +182,41 @@ static void delete_selected_file(void) {
 static void trash_selected_file(void) {
     if (file_list.count <= 0) return;
 
-    const FileEntry *entry = &file_list.entries[file_list.selected];
-    if (strcmp(entry->name, "..") == 0) return;
-
-    char path[PATH_MAX];
-    int n = snprintf(path, sizeof(path), "%s/%s", file_list.path, entry->name);
-    if (n < 0 || (size_t)n >= sizeof(path)) return;
-
+    int marked_count = count_marked_files(&file_list);
     int old_selected = file_list.selected;
-    if (run_trash_command(path) == 0) {
+    int changed = 0;
+
+    for (int i = 0; i < file_list.count; ++i) {
+        if (marked_count > 0 && !file_list.entries[i].marked) continue;
+        if (strcmp(file_list.entries[i].name, "..") == 0) continue;
+
+        char path[PATH_MAX];
+        int n = snprintf(path, sizeof(path), "%s/%s",
+                         file_list.path, file_list.entries[i].name);
+        if (n < 0 || (size_t)n >= sizeof(path)) continue;
+
+        if (run_trash_command(path) == 0) changed = 1;
+    }
+
+    if (changed) {
         refresh_after_file_change(old_selected);
+    }
+}
+
+static void toggle_selected_mark(void) {
+    if (file_list.count <= 0) return;
+    if (strcmp(file_list.entries[file_list.selected].name, "..") == 0) return;
+
+    toggle_file_mark(&file_list, file_list.selected);
+    int marked = count_marked_files(&file_list);
+
+    if (marked > 0) {
+        char message[64];
+        snprintf(message, sizeof(message), "%d item%s selected",
+                 marked, marked == 1 ? "" : "s");
+        set_status(message);
+    } else {
+        set_status(NULL);
     }
 }
 
@@ -862,6 +895,9 @@ void handle_key(XKeyEvent *ev) {
     switch (ks) {
         case XK_colon:
             show_command_menu();
+            break;
+        case XK_space:
+            toggle_selected_mark();
             break;
         case XK_j:
             if (file_list.count > 0) {
