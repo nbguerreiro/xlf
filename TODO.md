@@ -56,7 +56,7 @@ The remaining work is maintenance and future feature development rather than unf
 10) Navigation / selection state
   - [x] Remember the selected item for each directory when navigating away and restore it when returning. (effort: small)
 
-11) Future usability features
+11) Future usability features\n  - [x] Persistent command history stored under $XDG_STATE_HOME/fm (or ~/.local/state/fm). (effort: small)
   - [x] Configurable external commands: define commands and optional keybindings in commands.h; expose internal and external commands through the unified ':' dmenu menu, with dmenu used for interactive prompts such as rename and search. (effort: medium)
   - [ ] Multiselection: allow selecting multiple files/directories for operations such as copy, move, delete, and trash. (effort: medium)
   - [ ] Control-click context menu using dmenu: open a dmenu-based context menu for the clicked item and expose relevant file operations. (effort: medium)
