@@ -23,7 +23,6 @@
 #define LINE_HEIGHT 24
 #define INFO_HEIGHT 28
 #define PATH_HEIGHT 28
-#define SEARCH_MAX 256
 
 extern Display *dpy;
 extern Window win;
@@ -41,12 +40,6 @@ extern char *preview_media_text;
 extern int preview_is_media;
 extern char *preview_text_content;
 extern int preview_is_text;
-extern int search_active;
-extern char search_query[SEARCH_MAX];
-extern size_t search_query_len;
-extern int rename_active;
-extern char rename_query[SEARCH_MAX];
-extern size_t rename_query_len;
 extern char status_message[256];
 
 cairo_surface_t *window_surface = NULL;
@@ -198,19 +191,9 @@ void draw_path_bar(cairo_t *cr, int x, int y, int width, FileList *list) {
     free(display_path);
 }
 
-static int search_matches(const FileEntry *entry) {
-    return !search_active || search_query_len == 0 ||
-           strcasestr(entry->name, search_query) != NULL;
-}
-
 int ui_next_search_match(int start, int direction) {
     if (file_list.count <= 0) return -1;
-    int index = start;
-    for (int i = 0; i < file_list.count; ++i) {
-        index = (index + direction + file_list.count) % file_list.count;
-        if (search_matches(&file_list.entries[index])) return index;
-    }
-    return -1;
+    return (start + direction + file_list.count) % file_list.count;
 }
 
 void draw_file_entries(cairo_t *cr, const FileList *list, int x, int y, int width, int height) {
@@ -221,8 +204,6 @@ void draw_file_entries(cairo_t *cr, const FileList *list, int x, int y, int widt
     int visible_items = height / LINE_HEIGHT;
     int row = 0;
     for (int i = 0; i < list->count && row < visible_items; i++) {
-        if (!search_matches(&list->entries[i])) continue;
-
         int item_y = y + row * LINE_HEIGHT + MARGIN;
 
         if (i == list->selected) {
@@ -259,30 +240,7 @@ void set_status(const char *message) {
 }
 
 void draw_file_list(cairo_t *cr, FileList *list, int x, int y, int width, int height) {
-    // Draw search/rename feedback in the path bar.
-    if (rename_active) {
-        cairo_set_source_rgb(cr, BG_R/255.0, BG_G/255.0, BG_B/255.0);
-        cairo_rectangle(cr, x, y, width, PATH_HEIGHT);
-        cairo_fill(cr);
-        cairo_set_source_rgb(cr, TEXT_R/255.0, TEXT_G/255.0, TEXT_B/255.0);
-        char rename_display[SEARCH_MAX + 10];
-        snprintf(rename_display, sizeof(rename_display), "Rename: %s", rename_query);
-        draw_text(cr, rename_display, x + MARGIN, (PATH_HEIGHT / 2) - 5,
-                  width - 2 * MARGIN, layout_path);
-    } else if (search_active) {
-        cairo_set_source_rgb(cr, BG_R/255.0, BG_G/255.0, BG_B/255.0);
-        cairo_rectangle(cr, x, y, width, PATH_HEIGHT);
-        cairo_fill(cr);
-        cairo_set_source_rgb(cr, TEXT_R/255.0, TEXT_G/255.0, TEXT_B/255.0);
-        char search_display[SEARCH_MAX + 4];
-        snprintf(search_display, sizeof(search_display), "/%s", search_query);
-        draw_text(cr, search_display, x + MARGIN, (PATH_HEIGHT / 2) - 5,
-                  width - 2 * MARGIN, layout_path);
-    } else {
-        draw_path_bar(cr, x, y, width, list);
-    }
-    
-    // Draw file entries below
+    draw_path_bar(cr, x, y, width, list);
     draw_file_entries(cr, list, x, y + PATH_HEIGHT, width, height - PATH_HEIGHT);
 }
 

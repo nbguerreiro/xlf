@@ -22,6 +22,7 @@ Optional tools (for richer previews):
   - poppler-utils (pdfinfo)
   - mediainfo
   - mp3info
+  - dmenu (for the external command menu)
 
 Build
 - Recommended: have pkg-config set up for the libraries above.
@@ -53,3 +54,10 @@ Notes and limitations
 
 License
 - (Add license text or file here)
+
+Configurable external commands
+- Edit `commands.h` to add commands to the `:` menu.
+- Each entry has a menu name, executable/script name, and optional shortcut such as `C-i`.
+- The selected file's path is passed to the command as argv[1].
+- The dmenu command is taken from the `DMENU` environment variable; if unset, `dmenu` is used.
+- xlf adds `-w <window-id>` so dmenu is associated with the fm window.

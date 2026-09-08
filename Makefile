@@ -5,7 +5,8 @@ CFLAGS ?= -std=c11 -O2 -Wall -Wextra
 CFLAGS += $(PKG_CFLAGS)
 LDFLAGS ?=
 LDFLAGS += $(PKG_LIBS) -pthread
-SRC := fm.c filelist.c util.c preview.c ui.c
+SRC := fm.c filelist.c util.c preview.c ui.c history.c
+HEADERS := commands.h history.h
 BIN := fm
 
 .PHONY: all run clean sanitize sanitize-test lint test deps check-deps
@@ -15,8 +16,8 @@ all: check-deps $(BIN)
 check-deps:
 	@pkg-config --exists cairo pangocairo pango gdk-pixbuf-2.0 gio-2.0 x11 || (echo "Missing required pkg-config dependencies: cairo pangocairo pango gdk-pixbuf-2.0 gio-2.0 x11"; exit 1)
 
-$(BIN): $(SRC)
-	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
+$(BIN): $(SRC) $(HEADERS)
+	$(CC) $(CFLAGS) -o $@ $(SRC) $(LDFLAGS)
 
 run: $(BIN)
 	./$(BIN)
@@ -59,7 +60,7 @@ tests/test_type_detection_sanitize: tests/test_type_detection.c preview.c previe
 	$(CC) $(CFLAGS) -ffunction-sections -fdata-sections -I. -o $@ tests/test_type_detection.c preview.c $(LDFLAGS) -Wl,--gc-sections
 
 tests/test_preview_helpers_sanitize: tests/test_preview_helpers.c preview.c preview.h filelist.c filelist.h util.c util.h
-	$(CC) $(CFLAGS) -ffunction-sections -fdata-sections -I. -o $@ tests/test_preview_helpers.c preview.c filelist.c util.c $(LDFLAGS) -Wl,--gc-sections
+	$(CC) $(CFLAGS) -ffunction-sections -fdata-sections -I. -o $@ tests/test_preview_helpers_sanitize.c preview.c filelist.c util.c $(LDFLAGS) -Wl,--gc-sections
 
 deps:
 	@echo "Required system packages:"

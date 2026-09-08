@@ -5,6 +5,7 @@
 #include "util.h"
 #include "preview.h"
 #include "ui.h"
+#include "commands.h"\n#include "history.h"
 #include <stdlib.h>
 #include <string.h>
 #include <strings.h>
@@ -88,13 +89,6 @@ int preview_worker_started = 0;
 Time last_click_time = 0;
 int last_click_index = -1;
 
-#define SEARCH_MAX 256
-int search_active = 0;
-char search_query[SEARCH_MAX];
-size_t search_query_len = 0;
-int rename_active = 0;
-char rename_query[SEARCH_MAX];
-size_t rename_query_len = 0;
 
 static int remove_tree(const char *path) {
     struct stat st;
@@ -192,6 +186,440 @@ static void trash_selected_file(void) {
     }
 }
 
+static int parse_dmenu_argv(char ***argv_out, size_t *argc_out) {
+    const char *config = getenv("DMENU");
+    if (!config || !*config) config = "dmenu";
+
+    size_t capacity = 8;
+    size_t argc = 0;
+    char **argv = calloc(capacity, sizeof(*argv));
+    if (!argv) return -1;
+
+    size_t token_capacity = 64;
+    size_t token_len = 0;
+    char *token = malloc(token_capacity);
+    if (!token) {
+        free(argv);
+        return -1;
+    }
+
+    int in_single_quote = 0;
+    int in_double_quote = 0;
+    int escaped = 0;
+    int token_started = 0;
+
+    for (const char *p = config;; ++p) {
+        unsigned char ch = (unsigned char)*p;
+        int end_of_token = (ch == '\0');
+
+        if (escaped) {
+            if (end_of_token) {
+                free(token);
+                for (size_t i = 0; i < argc; ++i) free(argv[i]);
+                free(argv);
+                return -1;
+            }
+            if (token_len + 1 >= token_capacity) {
+                token_capacity *= 2;
+                char *grown = realloc(token, token_capacity);
+                if (!grown) {
+                    free(token);
+                    for (size_t i = 0; i < argc; ++i) free(argv[i]);
+                    free(argv);
+                    return -1;
+                }
+                token = grown;
+            }
+            token[token_len++] = (char)ch;
+            token_started = 1;
+            escaped = 0;
+            continue;
+        }
+
+        if (in_single_quote) {
+            if (ch == '\0') {
+                free(token);
+                for (size_t i = 0; i < argc; ++i) free(argv[i]);
+                free(argv);
+                return -1;
+            }
+            if (ch == '\'') {
+                in_single_quote = 0;
+            } else {
+                if (token_len + 1 >= token_capacity) {
+                    token_capacity *= 2;
+                    char *grown = realloc(token, token_capacity);
+                    if (!grown) {
+                        free(token);
+                        for (size_t i = 0; i < argc; ++i) free(argv[i]);
+                        free(argv);
+                        return -1;
+                    }
+                    token = grown;
+                }
+                token[token_len++] = (char)ch;
+                token_started = 1;
+            }
+            continue;
+        }
+
+        if (in_double_quote) {
+            if (ch == '\0') {
+                free(token);
+                for (size_t i = 0; i < argc; ++i) free(argv[i]);
+                free(argv);
+                return -1;
+            }
+            if (ch == '"') {
+                in_double_quote = 0;
+            } else if (ch == '\\') {
+                escaped = 1;
+            } else {
+                if (token_len + 1 >= token_capacity) {
+                    token_capacity *= 2;
+                    char *grown = realloc(token, token_capacity);
+                    if (!grown) {
+                        free(token);
+                        for (size_t i = 0; i < argc; ++i) free(argv[i]);
+                        free(argv);
+                        return -1;
+                    }
+                    token = grown;
+                }
+                token[token_len++] = (char)ch;
+                token_started = 1;
+            }
+            continue;
+        }
+
+        if (end_of_token || ch == ' ' || ch == '\t' || ch == '\n') {
+            if (token_started) {
+                if (argc + 1 >= capacity) {
+                    capacity *= 2;
+                    char **grown = realloc(argv, capacity * sizeof(*argv));
+                    if (!grown) {
+                        free(token);
+                        for (size_t i = 0; i < argc; ++i) free(argv[i]);
+                        free(argv);
+                        return -1;
+                    }
+                    argv = grown;
+                }
+                token[token_len] = '\0';
+                argv[argc] = strdup(token);
+                if (!argv[argc]) {
+                    free(token);
+                    for (size_t i = 0; i < argc; ++i) free(argv[i]);
+                    free(argv);
+                    return -1;
+                }
+                ++argc;
+                token_len = 0;
+                token_started = 0;
+            }
+            if (end_of_token) break;
+            continue;
+        }
+
+        if (ch == '\'') {
+            in_single_quote = 1;
+            token_started = 1;
+        } else if (ch == '"') {
+            in_double_quote = 1;
+            token_started = 1;
+        } else if (ch == '\\') {
+            escaped = 1;
+            token_started = 1;
+        } else {
+            if (token_len + 1 >= token_capacity) {
+                token_capacity *= 2;
+                char *grown = realloc(token, token_capacity);
+                if (!grown) {
+                    free(token);
+                    for (size_t i = 0; i < argc; ++i) free(argv[i]);
+                    free(argv);
+                    return -1;
+                }
+                token = grown;
+            }
+            token[token_len++] = (char)ch;
+            token_started = 1;
+        }
+    }
+
+    free(token);
+
+    char window_id[32];
+    snprintf(window_id, sizeof(window_id), "%lu", (unsigned long)win);
+
+    if (argc + 3 > capacity) {
+        char **grown = realloc(argv, (argc + 3) * sizeof(*argv));
+        if (!grown) {
+            for (size_t i = 0; i < argc; ++i) free(argv[i]);
+            free(argv);
+            return -1;
+        }
+        argv = grown;
+    }
+
+    argv[argc] = strdup("-w");
+    argv[argc + 1] = strdup(window_id);
+    argv[argc + 2] = NULL;
+    if (!argv[argc] || !argv[argc + 1]) {
+        free(argv[argc]);
+        free(argv[argc + 1]);
+        for (size_t i = 0; i < argc; ++i) free(argv[i]);
+        free(argv);
+        return -1;
+    }
+
+    *argv_out = argv;
+    *argc_out = argc + 2;
+    return 0;
+}
+
+static void free_dmenu_argv(char **argv, size_t argc) {
+    if (!argv) return;
+    for (size_t i = 0; i < argc; ++i) free(argv[i]);
+    free(argv);
+}
+
+static char *run_dmenu(const char *input) {
+    char **argv = NULL;
+    size_t argc = 0;
+    if (parse_dmenu_argv(&argv, &argc) != 0) return NULL;
+
+    int input_pipe[2] = {-1, -1};
+    int output_pipe[2] = {-1, -1};
+    if (pipe(input_pipe) != 0 || pipe(output_pipe) != 0) {
+        if (input_pipe[0] >= 0) close(input_pipe[0]);
+        if (input_pipe[1] >= 0) close(input_pipe[1]);
+        if (output_pipe[0] >= 0) close(output_pipe[0]);
+        if (output_pipe[1] >= 0) close(output_pipe[1]);
+        free_dmenu_argv(argv, argc);
+        return NULL;
+    }
+
+    pid_t pid = fork();
+    if (pid < 0) {
+        close(input_pipe[0]);
+        close(input_pipe[1]);
+        close(output_pipe[0]);
+        close(output_pipe[1]);
+        free_dmenu_argv(argv, argc);
+        return NULL;
+    }
+
+    if (pid == 0) {
+        dup2(input_pipe[0], STDIN_FILENO);
+        dup2(output_pipe[1], STDOUT_FILENO);
+        close(input_pipe[0]);
+        close(input_pipe[1]);
+        close(output_pipe[0]);
+        close(output_pipe[1]);
+        execvp(argv[0], argv);
+        _exit(127);
+    }
+
+    close(input_pipe[0]);
+    close(output_pipe[1]);
+
+    size_t input_len = input ? strlen(input) : 0;
+    size_t written = 0;
+    while (written < input_len) {
+        ssize_t n = write(input_pipe[1], input + written, input_len - written);
+        if (n < 0) {
+            if (errno == EINTR) continue;
+            break;
+        }
+        written += (size_t)n;
+    }
+    close(input_pipe[1]);
+
+    char result[PATH_MAX];
+    size_t result_len = 0;
+    while (result_len + 1 < sizeof(result)) {
+        ssize_t n = read(output_pipe[0], result + result_len,
+                         sizeof(result) - result_len - 1);
+        if (n < 0) {
+            if (errno == EINTR) continue;
+            break;
+        }
+        if (n == 0) break;
+        result_len += (size_t)n;
+    }
+    close(output_pipe[0]);
+
+    int status;
+    while (waitpid(pid, &status, 0) < 0) {
+        if (errno != EINTR) break;
+    }
+    free_dmenu_argv(argv, argc);
+
+    if (result_len == 0) return NULL;
+    result[result_len] = '\0';
+    result[strcspn(result, "\r\n")] = '\0';
+    if (result[0] == '\0') return NULL;
+    return strdup(result);
+}
+
+typedef void (*InternalCommandHandler)(void);
+
+typedef struct {
+    const char *name;
+    const char *key;
+    InternalCommandHandler handler;
+} InternalCommand;
+
+static void open_selected_file(void);
+static void command_rename(void);
+static void command_search(void);
+static void command_parent(void);
+static void command_enter(void);
+static void command_history(void);
+
+static const InternalCommand internal_commands[] = {
+    {"open", "o", open_selected_file},
+    {"rename", "r", command_rename},
+    {"delete", NULL, delete_selected_file},
+    {"trash", NULL, trash_selected_file},
+    {"search", "/", command_search},
+    {"parent", "h", command_parent},
+    {"enter", "l", command_enter}
+};
+
+#define INTERNAL_COMMAND_COUNT \
+    (sizeof(internal_commands) / sizeof(internal_commands[0]))
+
+static const ExternalCommand *find_external_command(const char *name) {
+    for (size_t i = 0; external_commands[i].name != NULL; ++i) {
+        if (external_commands[i].name &&
+            strcmp(external_commands[i].name, name) == 0) {
+            return &external_commands[i];
+        }
+    }
+    return NULL;
+}
+
+static int command_key_matches(const char *key, KeySym ks,
+                                   unsigned int state,
+                                   const char *input, int input_len) {
+    if (!key) return 0;
+
+    if (strncmp(key, "C-", 2) == 0 &&
+        key[2] != '\0' && key[3] == '\0') {
+        unsigned char ch = (unsigned char)key[2];
+        if (ch >= 'a' && ch <= 'z') ch = (unsigned char)(ch - 'a' + 'A');
+        if ((state & ControlMask) == 0) return 0;
+
+        /*
+         * XLookupString translates some control combinations to a different
+         * KeySym (C-i becomes Tab, C-m becomes Return, etc.). Compare the
+         * translated input byte as well as the KeySym so config entries such
+         * as "C-i" work consistently.
+         */
+        if (input && input_len > 0 &&
+            (unsigned char)input[0] == (unsigned char)(ch & 0x1f)) {
+            return 1;
+        }
+
+        KeySym expected = (KeySym)ch;
+        return ks == expected || ks == (KeySym)(ch + ('a' - 'A'));
+    }
+
+    if (strcmp(key, "Del") == 0) return ks == XK_Delete;
+    if (strcmp(key, "BackSpace") == 0) return ks == XK_BackSpace;
+
+    return key[0] != '\0' && key[1] == '\0' &&
+           ks == (KeySym)(unsigned char)key[0];
+}
+
+static void run_external_command(const ExternalCommand *command) {
+    if (!command || !command->command || file_list.count <= 0) return;
+
+    const FileEntry *entry = &file_list.entries[file_list.selected];
+    char path[PATH_MAX];
+    int n = snprintf(path, sizeof(path), "%s/%s",
+                     file_list.path ? file_list.path : ".",
+                     entry->name);
+    if (n < 0 || (size_t)n >= sizeof(path)) {
+        set_status("Command path is too long");
+        return;
+    }
+
+    pid_t pid = fork();
+    if (pid < 0) {
+        set_status("Could not start command");
+        return;
+    }
+    if (pid == 0) {
+        execlp(command->command, command->command, path, (char *)NULL);
+        _exit(127);
+    }
+
+    set_status(command->name ? command->name : "Command started");
+}
+
+static const InternalCommand *find_internal_command(const char *name) {
+    for (size_t i = 0; i < INTERNAL_COMMAND_COUNT; ++i) {
+        if (strcmp(internal_commands[i].name, name) == 0) {
+            return &internal_commands[i];
+        }
+    }
+    return NULL;
+}
+
+static void run_command(const char *name) {
+    const InternalCommand *internal = find_internal_command(name);
+    if (internal) {
+        internal->handler();
+        return;
+    }
+
+    const ExternalCommand *external = find_external_command(name);
+    if (external) {
+        run_external_command(external);
+    }
+}
+
+static void show_command_menu(void) {
+    size_t capacity = 1;
+    for (size_t i = 0; i < INTERNAL_COMMAND_COUNT; ++i) {
+        capacity += strlen(internal_commands[i].name) + 1;
+    }
+    for (size_t i = 0; external_commands[i].name != NULL; ++i) {
+        if (external_commands[i].name) {
+            capacity += strlen(external_commands[i].name) + 1;
+        }
+    }
+
+    char *menu = calloc(capacity, 1);
+    if (!menu) return;
+
+    size_t offset = 0;
+    for (size_t i = 0; i < INTERNAL_COMMAND_COUNT; ++i) {
+        size_t len = strlen(internal_commands[i].name);
+        memcpy(menu + offset, internal_commands[i].name, len);
+        offset += len;
+        menu[offset++] = '\n';
+    }
+    for (size_t i = 0; external_commands[i].name != NULL; ++i) {
+        if (!external_commands[i].name) continue;
+        size_t len = strlen(external_commands[i].name);
+        memcpy(menu + offset, external_commands[i].name, len);
+        offset += len;
+        menu[offset++] = '\n';
+    }
+    menu[offset] = '\0';
+
+    char *selection = run_dmenu(menu);
+    free(menu);
+    if (!selection) return;
+
+    run_command(selection);
+    free(selection);
+}
+
 static void open_file_with_xdg(const char *path) {
     pid_t pid = fork();
     if (pid < 0) return;
@@ -247,87 +675,132 @@ void handle_mouse_button(const XButtonEvent *ev, int win_width, int win_height) 
     }
 }
 
-static void begin_rename(void) {
+static int valid_new_name(const char *name) {
+    if (!name || name[0] == '\0') return 0;
+    for (const unsigned char *p = (const unsigned char *)name; *p; ++p) {
+        if (*p == '/' || *p < 0x20 || *p == 0x7f) return 0;
+    }
+    return 1;
+}
+
+static void command_rename(void) {
     if (file_list.count <= 0) return;
+
     const FileEntry *entry = &file_list.entries[file_list.selected];
     if (strcmp(entry->name, "..") == 0) return;
 
-    rename_active = 1;
-    rename_query_len = strlen(entry->name);
-    if (rename_query_len >= SEARCH_MAX) rename_query_len = SEARCH_MAX - 1;
-    memcpy(rename_query, entry->name, rename_query_len);
-    rename_query[rename_query_len] = '\0';
-}
+    char *new_name = run_dmenu(entry->name);
+    if (!new_name || !valid_new_name(new_name)) {
+        free(new_name);
+        return;
+    }
 
-static void finish_rename(int accept) {
-    if (!rename_active) return;
-    rename_active = 0;
-    if (!accept || rename_query_len == 0) return;
-
-    const FileEntry *entry = &file_list.entries[file_list.selected];
-    if (strcmp(entry->name, rename_query) == 0) return;
-
-    for (const unsigned char *p = (const unsigned char *)rename_query; *p; ++p) {
-        if (*p == '/' || *p < 0x20 || *p == 0x7f) return;
+    if (strcmp(entry->name, new_name) == 0) {
+        free(new_name);
+        return;
     }
 
     char old_path[PATH_MAX], new_path[PATH_MAX];
     int n = snprintf(old_path, sizeof(old_path), "%s/%s", file_list.path, entry->name);
-    if (n < 0 || (size_t)n >= sizeof(old_path)) return;
-    n = snprintf(new_path, sizeof(new_path), "%s/%s", file_list.path, rename_query);
-    if (n < 0 || (size_t)n >= sizeof(new_path)) return;
+    if (n < 0 || (size_t)n >= sizeof(old_path)) {
+        free(new_name);
+        return;
+    }
+    n = snprintf(new_path, sizeof(new_path), "%s/%s", file_list.path, new_name);
+    if (n < 0 || (size_t)n >= sizeof(new_path)) {
+        free(new_name);
+        return;
+    }
 
     if (rename(old_path, new_path) == 0) {
-        // load_directory() replaces list->path, so don't pass file_list.path
-        // directly: it frees that string before duplicating the new path.
         char current_path[PATH_MAX];
         int path_len = snprintf(current_path, sizeof(current_path), "%s", file_list.path);
-        if (path_len < 0 || (size_t)path_len >= sizeof(current_path)) return;
-
-        load_directory(&file_list, current_path);
-
-        // Keep the renamed entry selected so the preview and path bar update
-        // to the new name immediately.
-        file_list.selected = 0;
-        for (int i = 0; i < file_list.count; ++i) {
-            if (strcmp(file_list.entries[i].name, rename_query) == 0) {
-                file_list.selected = i;
-                break;
+        if (path_len >= 0 && (size_t)path_len < sizeof(current_path)) {
+            load_directory(&file_list, current_path);
+            file_list.selected = 0;
+            for (int i = 0; i < file_list.count; ++i) {
+                if (strcmp(file_list.entries[i].name, new_name) == 0) {
+                    file_list.selected = i;
+                    break;
+                }
             }
-        }
-        if (file_list.count > 0) {
-            request_preview();
+            if (file_list.count > 0) request_preview();
         }
     }
+
+    free(new_name);
 }
 
-static void handle_rename_key(XKeyEvent *ev, KeySym ks) {
-    if (ks == XK_Escape) {
-        finish_rename(0);
-        return;
-    }
-    if (ks == XK_Return || ks == XK_KP_Enter) {
-        finish_rename(1);
-        return;
-    }
-    if (ks == XK_BackSpace) {
-        if (rename_query_len > 0) rename_query[--rename_query_len] = '\0';
-        return;
+static void command_search(void) {
+    if (file_list.count <= 0) return;
+
+    size_t capacity = 1;
+    for (int i = 0; i < file_list.count; ++i) {
+        capacity += strlen(file_list.entries[i].name) + 1;
     }
 
-    char input[SEARCH_MAX];
-    KeySym translated;
-    int n = XLookupString(ev, input, sizeof(input) - 1, &translated, NULL);
-    if (n <= 0 || rename_query_len + (size_t)n >= SEARCH_MAX) return;
+    char *menu = calloc(capacity, 1);
+    if (!menu) return;
 
-    for (int i = 0; i < n; ++i) {
-        unsigned char ch = (unsigned char)input[i];
-        if (ch < 0x20 || ch == 0x7f || ch == '/') return;
+    size_t offset = 0;
+    for (int i = 0; i < file_list.count; ++i) {
+        size_t len = strlen(file_list.entries[i].name);
+        memcpy(menu + offset, file_list.entries[i].name, len);
+        offset += len;
+        menu[offset++] = '\n';
+    }
+    menu[offset] = '\0';
+
+    char *selection = run_dmenu(menu);
+    free(menu);
+    if (!selection) return;
+
+    for (int i = 0; i < file_list.count; ++i) {
+        if (strcmp(file_list.entries[i].name, selection) == 0) {
+            file_list.selected = i;
+            request_preview();
+            break;
+        }
     }
 
-    memcpy(rename_query + rename_query_len, input, (size_t)n);
-    rename_query_len += (size_t)n;
-    rename_query[rename_query_len] = '\0';
+    free(selection);
+}
+
+static void command_parent(void) {
+    if (strcmp(file_list.path, ".") == 0) {
+        load_directory(&file_list, "..");
+    } else if (strcmp(file_list.path, "/") != 0) {
+        const char *last_slash = strrchr(file_list.path, '/');
+        char parent_path[PATH_MAX];
+        if (last_slash && last_slash > file_list.path) {
+            size_t len = (size_t)(last_slash - file_list.path);
+            if (len >= sizeof(parent_path)) return;
+            memcpy(parent_path, file_list.path, len);
+            parent_path[len] = '\0';
+        } else {
+            snprintf(parent_path, sizeof(parent_path), ".");
+        }
+        load_directory(&file_list, parent_path);
+    }
+    request_preview();
+}
+
+static void command_enter(void) {
+    if (file_list.count <= 0) return;
+
+    const FileEntry *entry = &file_list.entries[file_list.selected];
+    if (entry->is_dir) {
+        char new_path[PATH_MAX];
+        int n = snprintf(new_path, sizeof(new_path), "%s/%s",
+                         file_list.path, entry->name);
+        if (n >= 0 && (size_t)n < sizeof(new_path) &&
+            strcmp(entry->name, "..") != 0) {
+            load_directory(&file_list, new_path);
+            request_preview();
+        }
+    } else {
+        open_selected_file();
+    }
 }
 
 static void open_selected_file(void) {
@@ -344,97 +817,33 @@ static void open_selected_file(void) {
     open_file_with_xdg(path);
 }
 
-static void search_select(void) {
-    if (!search_active || search_query_len == 0 || file_list.count <= 0) return;
-
-    int start = file_list.selected;
-    for (int offset = 1; offset <= file_list.count; ++offset) {
-        int index = (start + offset) % file_list.count;
-        if (strcasestr(file_list.entries[index].name, search_query) != NULL) {
-            file_list.selected = index;
-            request_preview();
-            return;
-        }
-    }
-
-    if (strcasestr(file_list.entries[start].name, search_query) != NULL) {
-        request_preview();
-    }
-}
-
-static void handle_search_key(XKeyEvent *ev, KeySym ks) {
-    if (ks == XK_Escape || ks == XK_Return || ks == XK_KP_Enter) {
-        search_active = 0;
-        search_query_len = 0;
-        search_query[0] = '\0';
-        return;
-    }
-
-    if (ks == XK_BackSpace) {
-        if (search_query_len > 0) {
-            search_query[--search_query_len] = '\0';
-            search_select();
-        }
-        return;
-    }
-
-    char input[8];
-    KeySym translated;
-    int n = XLookupString(ev, input, sizeof(input) - 1, &translated, NULL);
-    if (n <= 0 || search_query_len + (size_t)n >= SEARCH_MAX) return;
-
-    for (int i = 0; i < n; ++i) {
-        unsigned char ch = (unsigned char)input[i];
-        if (ch < 0x20 || ch == 0x7f) return;
-    }
-
-    memcpy(search_query + search_query_len, input, (size_t)n);
-    search_query_len += (size_t)n;
-    search_query[search_query_len] = '\0';
-    search_select();
-}
-
 void handle_key(XKeyEvent *ev) {
     char input[32];
     KeySym ks;
     int input_len = XLookupString(ev, input, sizeof(input), &ks, NULL);
     (void)input_len;
 
-    if (rename_active) {
-        handle_rename_key(ev, ks);
-        return;
-    }
 
-    if (search_active) {
-        if (ks == XK_Up || ks == XK_Down) {
-            int next = ui_next_search_match(file_list.selected, ks == XK_Down ? 1 : -1);
-            if (next >= 0) {
-                file_list.selected = next;
-                request_preview();
+    if (ks == XK_j || ks == XK_k) {
+        /* j/k remain direct navigation keys rather than command-menu actions. */
+    } else {
+        for (size_t i = 0; i < INTERNAL_COMMAND_COUNT; ++i) {
+            if (command_key_matches(internal_commands[i].key, ks, ev->state, input, input_len)) {
+                internal_commands[i].handler();
+                return;
             }
-            return;
         }
-        handle_search_key(ev, ks);
-        return;
+        for (size_t i = 0; external_commands[i].name != NULL; ++i) {
+            if (command_key_matches(external_commands[i].key, ks, ev->state, input, input_len)) {
+                run_external_command(&external_commands[i]);
+                return;
+            }
+        }
     }
 
     switch (ks) {
-        case XK_slash:
-            search_active = 1;
-            search_query_len = 0;
-            search_query[0] = '\0';
-            break;
-        case XK_o:
-            open_selected_file();
-            break;
-        case XK_r:
-            begin_rename();
-            break;
-        case XK_Delete:
-            delete_selected_file();
-            break;
-        case XK_BackSpace:
-            trash_selected_file();
+        case XK_colon:
+            show_command_menu();
             break;
         case XK_j:
             if (file_list.count > 0) {
@@ -454,48 +863,7 @@ void handle_key(XKeyEvent *ev) {
                 }
             }
             break;
-        case XK_l:
-            if (file_list.count > 0) {
-                const FileEntry *entry = &file_list.entries[file_list.selected];
-
-                if (entry->is_dir) {
-                    char new_path[PATH_MAX];
-                    int n = snprintf(new_path, sizeof(new_path), "%s/%s",
-                                     file_list.path, entry->name);
-                    if (n >= 0 && (size_t)n < sizeof(new_path) &&
-                        strcmp(entry->name, "..") != 0) {
-                        load_directory(&file_list, new_path);
-                        request_preview();
-                    }
-                } else {
-                    open_selected_file();
-                }
-            }
-            break;
-        case XK_h:
-            // Go to parent directory
-            if (strcmp(file_list.path, ".") == 0) {
-                // Current directory is ".", go to ".."
-                load_directory(&file_list, "..");
-            } else if (strcmp(file_list.path, "/") == 0) {
-                // Already at root, do nothing
-                ;
-            } else {
-                const char *last_slash = strrchr(file_list.path, '/');
-                char parent_path[4096];
-                if (last_slash && last_slash > file_list.path) {
-                    // Remove everything after last slash
-                    int len = last_slash - file_list.path;
-                    strncpy(parent_path, file_list.path, len);
-                    parent_path[len] = '\0';
-                } else {
-                    // Path doesn't contain slash (shouldn't happen if not "." or "/")
-                    snprintf(parent_path, sizeof(parent_path), ".");
-                }
-                load_directory(&file_list, parent_path);
-            }
-            request_preview();
-            break;
+        /* h/l are handled by the unified command dispatcher. */
         case XK_q:
         case XK_Escape:
             exit(0);
