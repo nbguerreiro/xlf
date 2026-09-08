@@ -240,7 +240,7 @@ void set_status(const char *message) {
 }
 
 void draw_file_list(cairo_t *cr, FileList *list, int x, int y, int width, int height) {
-    draw_path_bar(cr, x, y, width, PATH_HEIGHT);
+    draw_path_bar(cr, x, y, width, list);
     draw_file_entries(cr, list, x, y + PATH_HEIGHT, width, height - PATH_HEIGHT);
 }
 
