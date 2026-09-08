@@ -54,4 +54,8 @@ The original TODO list is complete through item 9.3. All 19 listed implementatio
 The remaining work is maintenance and future feature development rather than unfinished items from this checklist.
 
 10) Navigation / selection state
-  - [ ] Remember the selected item for each directory when navigating away and restore it when returning. (effort: small)
+  - [x] Remember the selected item for each directory when navigating away and restore it when returning. (effort: small)
+
+11) Future usability features
+  - [ ] Multiselection: allow selecting multiple files/directories for operations such as copy, move, delete, and trash. (effort: medium)
+  - [ ] Control-click context menu using dmenu: open a dmenu-based context menu for the clicked item and expose relevant file operations. (effort: medium)
