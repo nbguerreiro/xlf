@@ -21,9 +21,10 @@ typedef struct {
 
 static const ExternalCommand external_commands[] = {
     /* {"com", "com.sh", "C-i"}, */
+    {NULL, NULL, NULL}
 };
 
 #define EXTERNAL_COMMAND_COUNT \
-    (sizeof(external_commands) / sizeof(external_commands[0]))
+    (sizeof(external_commands) / sizeof(external_commands[0]) - 1)
 
 #endif
