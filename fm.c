@@ -960,6 +960,107 @@ int main() {
                         int x, y;
                         unsigned int width, height, border, depth;
                         XGetGeometry(dpy, win, &root, &x, &y, &width, &height, &border, &depth);
+                                                    draw_ui(width, height);
+                        }
+                    }
+                    break;
+
+                case KeyPress:
+                    handle_key(&ev.xkey);
+                    {
+                        Window root;
+                        int x, y;
+                        unsigned int width, height, border, depth;
+                        XGetGeometry(dpy, win, &root, &x, &y, &width, &height, &border, &depth);
+                        draw_ui(width, height);
+                    }
+                    break;
+
+                case ClientMessage:
+                    if (ev.xclient.data.l[0] == (long)wm_delete_window) {
+                        running = 0;
+                    }
+                    break;
+
+                case ConfigureNotify:
+                    draw_ui(ev.xconfigure.width, ev.xconfigure.height);
+                    break;
+            }
+
+            if (!running) break;
+        }
+
+        if (!running) break;
+
+        int preview_applied = 0;
+        if (preview_wake_pipe[0] >= 0) {
+            char buffer[64];
+            ssize_t n;
+            while ((n = read(preview_wake_pipe[0], buffer, sizeof(buffer))) > 0) {
+                (void)n;
+                apply_preview_result();
+                preview_applied = 1;
+            }
+        }
+
+        // The wake pipe may become readable between X event processing and
+        // select(). If we consume it here, redraw immediately instead of
+        // waiting for another X event (for example, a focus change).
+        if (preview_applied) {
+            Window root;
+            int x, y;
+            unsigned int width, height, border, depth;
+            XGetGeometry(dpy, win, &root, &x, &y, &width, &height, &border, &depth);
+            draw_ui(width, height);
+        }
+
+        fd_set readfds;
+        FD_ZERO(&readfds);
+        FD_SET(x_fd, &readfds);
+        int max_fd = x_fd;
+
+        if (preview_wake_pipe[0] >= 0) {
+            FD_SET(preview_wake_pipe[0], &readfds);
+            if (preview_wake_pipe[0] > max_fd) max_fd = preview_wake_pipe[0];
+        }
+
+        if (select(max_fd + 1, &readfds, NULL, NULL, NULL) < 0) {
+            if (errno == EINTR) continue;
+            break;
+        }
+
+        if (preview_wake_pipe[0] >= 0 && FD_ISSET(preview_wake_pipe[0], &readfds)) {
+            char buffer[64];
+            while (read(preview_wake_pipe[0], buffer, sizeof(buffer)) > 0) {
+                apply_preview_result();
+            }
+
+            Window root;
+            int x, y;
+            unsigned int width, height, border, depth;
+            XGetGeometry(dpy, win, &root, &x, &y, &width, &height, &border, &depth);
+            draw_ui(width, height);
+        }
+    }
+
+    stop_preview_worker();
+
+    free_file_list(&file_list);
+    free_file_list(&preview_list);
+    free_preview_image();
+    free_preview_html();
+    free_preview_pdf();
+    free_preview_text();
+    free_preview_media();
+    free_scaled_image_cache();
+    free_pango_objects();
+    free_draw_surfaces();
+    FcFini();
+    XDestroyWindow(dpy, win);
+    XCloseDisplay(dpy);
+    return 0;
+}
+
                         draw_ui(width, height);
                     }
                     break;
