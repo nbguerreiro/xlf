@@ -575,22 +575,6 @@ static void run_command(const char *name) {
     }
 }
 
-static void run_command_key(KeySym ks, unsigned int state) {
-    for (size_t i = 0; i < INTERNAL_COMMAND_COUNT; ++i) {
-        if (command_key_matches(internal_commands[i].key, ks, state)) {
-            internal_commands[i].handler();
-            return;
-        }
-    }
-
-    for (size_t i = 0; i < EXTERNAL_COMMAND_COUNT; ++i) {
-        if (command_key_matches(external_commands[i].key, ks, state)) {
-            run_external_command(&external_commands[i]);
-            return;
-        }
-    }
-}
-
 static void show_command_menu(void) {
     size_t capacity = 1;
     for (size_t i = 0; i < INTERNAL_COMMAND_COUNT; ++i) {
@@ -853,17 +837,6 @@ void handle_key(XKeyEvent *ev) {
     int input_len = XLookupString(ev, input, sizeof(input), &ks, NULL);
     (void)input_len;
 
-    if (rename_active) {
-        handle_rename_key(ev, ks);
-        return;
-    }
-
-    run_external_command_key(ks, ev->state);
-    for (size_t i = 0; i < EXTERNAL_COMMAND_COUNT; ++i) {
-        if (external_command_key_matches(&external_commands[i], ks, ev->state)) {
-            return;
-        }
-    }
 
     if (search_active) {
         if (ks == XK_Up || ks == XK_Down) {
@@ -998,39 +971,3 @@ int main() {
                         int x, y;
                         unsigned int width, height, border, depth;
                         if (XGetGeometry(dpy, win, &root, &x, &y, &width, &height, &border, &depth)) {
-                            draw_ui(width, height);
-                        }
-                    }
-                    break;
-
-                case KeyPress:
-                    handle_key(&ev.xkey);
-                    {
-                        Window root;
-                        int x, y;
-                        unsigned int width, height, border, depth;
-                        XGetGeometry(dpy, win, &root, &x, &y, &width, &height, &border, &depth);
-                        draw_ui(width, height);
-                    }
-                    break;
-
-                case ClientMessage:
-                    if (ev.xclient.data.l[0] == (long)wm_delete_window) {
-                        running = 0;
-                    }
-                    break;
-
-                case ConfigureNotify:
-                    draw_ui(ev.xconfigure.width, ev.xconfigure.height);
-                    break;
-            }
-
-            if (!running) break;
-        }
-
-        if (!running) break;
-
-        int preview_applied = 0;
-        if (preview_wake_pipe[0] >= 0) {
-            char buffer[64];
-            ssize_t n;
