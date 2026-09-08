@@ -89,13 +89,6 @@ int preview_worker_started = 0;
 Time last_click_time = 0;
 int last_click_index = -1;
 
-#define SEARCH_MAX 256
-int search_active = 0;
-char search_query[SEARCH_MAX];
-size_t search_query_len = 0;
-int rename_active = 0;
-char rename_query[SEARCH_MAX];
-size_t rename_query_len = 0;
 
 static int remove_tree(const char *path) {
     struct stat st;
@@ -738,9 +731,38 @@ static void command_rename(void) {
 }
 
 static void command_search(void) {
-    search_active = 1;
-    search_query_len = 0;
-    search_query[0] = '\0';
+    if (file_list.count <= 0) return;
+
+    size_t capacity = 1;
+    for (int i = 0; i < file_list.count; ++i) {
+        capacity += strlen(file_list.entries[i].name) + 1;
+    }
+
+    char *menu = calloc(capacity, 1);
+    if (!menu) return;
+
+    size_t offset = 0;
+    for (int i = 0; i < file_list.count; ++i) {
+        size_t len = strlen(file_list.entries[i].name);
+        memcpy(menu + offset, file_list.entries[i].name, len);
+        offset += len;
+        menu[offset++] = '\n';
+    }
+    menu[offset] = '\0';
+
+    char *selection = run_dmenu(menu);
+    free(menu);
+    if (!selection) return;
+
+    for (int i = 0; i < file_list.count; ++i) {
+        if (strcmp(file_list.entries[i].name, selection) == 0) {
+            file_list.selected = i;
+            request_preview();
+            break;
+        }
+    }
+
+    free(selection);
 }
 
 static void command_parent(void) {
@@ -794,75 +816,12 @@ static void open_selected_file(void) {
     open_file_with_xdg(path);
 }
 
-static void search_select(void) {
-    if (!search_active || search_query_len == 0 || file_list.count <= 0) return;
-
-    int start = file_list.selected;
-    for (int offset = 1; offset <= file_list.count; ++offset) {
-        int index = (start + offset) % file_list.count;
-        if (strcasestr(file_list.entries[index].name, search_query) != NULL) {
-            file_list.selected = index;
-            request_preview();
-            return;
-        }
-    }
-
-    if (strcasestr(file_list.entries[start].name, search_query) != NULL) {
-        request_preview();
-    }
-}
-
-static void handle_search_key(XKeyEvent *ev, KeySym ks) {
-    if (ks == XK_Escape || ks == XK_Return || ks == XK_KP_Enter) {
-        search_active = 0;
-        search_query_len = 0;
-        search_query[0] = '\0';
-        return;
-    }
-
-    if (ks == XK_BackSpace) {
-        if (search_query_len > 0) {
-            search_query[--search_query_len] = '\0';
-            search_select();
-        }
-        return;
-    }
-
-    char input[8];
-    KeySym translated;
-    int n = XLookupString(ev, input, sizeof(input) - 1, &translated, NULL);
-    if (n <= 0 || search_query_len + (size_t)n >= SEARCH_MAX) return;
-
-    for (int i = 0; i < n; ++i) {
-        unsigned char ch = (unsigned char)input[i];
-        if (ch < 0x20 || ch == 0x7f) return;
-    }
-
-    memcpy(search_query + search_query_len, input, (size_t)n);
-    search_query_len += (size_t)n;
-    search_query[search_query_len] = '\0';
-    search_select();
-}
-
 void handle_key(XKeyEvent *ev) {
     char input[32];
     KeySym ks;
     int input_len = XLookupString(ev, input, sizeof(input), &ks, NULL);
     (void)input_len;
 
-
-    if (search_active) {
-        if (ks == XK_Up || ks == XK_Down) {
-            int next = ui_next_search_match(file_list.selected, ks == XK_Down ? 1 : -1);
-            if (next >= 0) {
-                file_list.selected = next;
-                request_preview();
-            }
-            return;
-        }
-        handle_search_key(ev, ks);
-        return;
-    }
 
     if (ks == XK_j || ks == XK_k) {
         /* j/k remain direct navigation keys rather than command-menu actions. */
