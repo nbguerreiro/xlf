@@ -6,6 +6,7 @@ CFLAGS += $(PKG_CFLAGS)
 LDFLAGS ?=
 LDFLAGS += $(PKG_LIBS) -pthread
 SRC := fm.c filelist.c util.c preview.c ui.c
+HEADERS := commands.h
 BIN := fm
 
 .PHONY: all run clean sanitize sanitize-test lint test deps check-deps
@@ -15,7 +16,7 @@ all: check-deps $(BIN)
 check-deps:
 	@pkg-config --exists cairo pangocairo pango gdk-pixbuf-2.0 gio-2.0 x11 || (echo "Missing required pkg-config dependencies: cairo pangocairo pango gdk-pixbuf-2.0 gio-2.0 x11"; exit 1)
 
-$(BIN): $(SRC)
+$(BIN): $(SRC) $(HEADERS)
 	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
 
 run: $(BIN)
