@@ -217,11 +217,14 @@ void draw_file_entries(cairo_t *cr, const FileList *list, int x, int y, int widt
         char display_name[256];
         PangoLayout *layout_to_use;
         if (list->entries[i].is_dir) {
-            snprintf(display_name, sizeof(display_name), "%s/", list->entries[i].name);
+            snprintf(display_name, sizeof(display_name), "%s%s/",
+                     list->entries[i].marked ? "* " : "",
+                     list->entries[i].name);
             layout_to_use = layout_bold;
         } else {
-            strncpy(display_name, list->entries[i].name, sizeof(display_name) - 1);
-            display_name[sizeof(display_name) - 1] = '\0';
+            snprintf(display_name, sizeof(display_name), "%s%s",
+                     list->entries[i].marked ? "* " : "",
+                     list->entries[i].name);
             layout_to_use = layout_normal;
         }
 
