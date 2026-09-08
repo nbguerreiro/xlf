@@ -680,10 +680,68 @@ static void open_file_with_xdg(const char *path) {
     }
 }
 
+static void show_context_menu(void) {
+    if (file_list.count <= 0 ||
+        file_list.selected < 0 ||
+        file_list.selected >= file_list.count) {
+        return;
+    }
+
+    const FileEntry *entry = &file_list.entries[file_list.selected];
+    if (strcmp(entry->name, "..") == 0) return;
+
+    const char *directory_action = entry->is_dir ? "enter" : "open";
+    const char *menu_template = "%s\nrename\ndelete\ntrash\n";
+    size_t capacity = strlen(menu_template) + strlen(directory_action) + 1;
+    char *menu = malloc(capacity);
+    if (!menu) {
+        set_status("Could not open context menu");
+        return;
+    }
+
+    int n = snprintf(menu, capacity, menu_template, directory_action);
+    if (n < 0 || (size_t)n >= capacity) {
+        free(menu);
+        set_status("Could not open context menu");
+        return;
+    }
+
+    char *selection = run_dmenu(menu);
+    free(menu);
+    if (!selection) return;
+
+    run_command(selection);
+    free(selection);
+}
+
 void handle_mouse_button(const XButtonEvent *ev, int win_width, int win_height) {
     if (ev->button != Button1 || ev->x < 0 || ev->x >= win_width) return;
 
     int left_width = (int)(win_width * PANE_RATIO);
+    if ((ev->state & ControlMask) != 0) {
+        if (ev->x >= left_width || ev->y < PATH_HEIGHT) return;
+
+        int list_y = ev->y - PATH_HEIGHT;
+        int visible_items = (win_height - PATH_HEIGHT) / LINE_HEIGHT;
+        if (visible_items <= 0 || file_list.count <= 0) return;
+
+        int scroll_offset = 0;
+        if (file_list.selected >= visible_items) {
+            scroll_offset = file_list.selected - visible_items + 1;
+        }
+
+        int row = list_y / LINE_HEIGHT;
+        int index = scroll_offset + row;
+        if (row < 0 || row >= visible_items || index < 0 || index >= file_list.count) return;
+        if (strcmp(file_list.entries[index].name, "..") == 0) return;
+
+        file_list.selected = index;
+        last_click_index = -1;
+        request_preview();
+        show_context_menu();
+        return;
+    }
+
     if (ev->x >= left_width || ev->y < PATH_HEIGHT) return;
 
     int list_y = ev->y - PATH_HEIGHT;
