@@ -960,7 +960,18 @@ int main() {
                         int x, y;
                         unsigned int width, height, border, depth;
                         XGetGeometry(dpy, win, &root, &x, &y, &width, &height, &border, &depth);
-                                                    draw_ui(width, height);
+                        draw_ui(width, height);
+                    }
+                    break;
+
+                case ButtonPress:
+                    handle_mouse_button(&ev.xbutton, win_width, win_height);
+                    {
+                        Window root;
+                        int x, y;
+                        unsigned int width, height, border, depth;
+                        if (XGetGeometry(dpy, win, &root, &x, &y, &width, &height, &border, &depth)) {
+                            draw_ui(width, height);
                         }
                     }
                     break;
@@ -1060,15 +1071,3 @@ int main() {
     XCloseDisplay(dpy);
     return 0;
 }
-
-                        draw_ui(width, height);
-                    }
-                    break;
-
-                case ButtonPress:
-                    handle_mouse_button(&ev.xbutton, win_width, win_height);
-                    {
-                        Window root;
-                        int x, y;
-                        unsigned int width, height, border, depth;
-                        if (XGetGeometry(dpy, win, &root, &x, &y, &width, &height, &border, &depth)) {
