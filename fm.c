@@ -485,7 +485,8 @@ static const InternalCommand internal_commands[] = {
     {"trash", NULL, trash_selected_file},
     {"search", "/", command_search},
     {"parent", "h", command_parent},
-    {"enter", "l", command_enter}
+    {"enter", "l", command_enter},
+    {"history", NULL, command_history}
 };
 
 #define INTERNAL_COMMAND_COUNT \
@@ -569,17 +570,32 @@ static const InternalCommand *find_internal_command(const char *name) {
     return NULL;
 }
 
+static void command_history(void) {
+    char *menu = history_menu();
+    if (!menu) return;
+
+    char *selection = run_dmenu(menu);
+    free(menu);
+    if (!selection) return;
+
+    run_command(selection);
+    free(selection);
+}
+
 static void run_command(const char *name) {
     const InternalCommand *internal = find_internal_command(name);
+    const ExternalCommand *external = find_external_command(name);
+
+    if (!internal && !external) return;
+
+    history_add(name);
+
     if (internal) {
         internal->handler();
         return;
     }
 
-    const ExternalCommand *external = find_external_command(name);
-    if (external) {
-        run_external_command(external);
-    }
+    run_external_command(external);
 }
 
 static void show_command_menu(void) {
