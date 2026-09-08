@@ -104,6 +104,28 @@ void free_file_list(FileList *list) {
     list->selected = 0;
 }
 
+void toggle_file_mark(FileList *list, int index) {
+    if (!list || index < 0 || index >= list->count) return;
+    if (strcmp(list->entries[index].name, "..") == 0) return;
+    list->entries[index].marked = !list->entries[index].marked;
+}
+
+void clear_file_marks(FileList *list) {
+    if (!list) return;
+    for (int i = 0; i < list->count; ++i) {
+        list->entries[i].marked = 0;
+    }
+}
+
+int count_marked_files(const FileList *list) {
+    if (!list) return 0;
+    int count = 0;
+    for (int i = 0; i < list->count; ++i) {
+        if (list->entries[i].marked) ++count;
+    }
+    return count;
+}
+
 int compare_entries(const void *a, const void *b) {
     const FileEntry *ea = (const FileEntry *)a;
     const FileEntry *eb = (const FileEntry *)b;
@@ -161,6 +183,7 @@ void load_directory(FileList *list, const char *path) {
 
                 list->entries[list->count].name = name;
                 list->entries[list->count].is_dir = S_ISDIR(st.st_mode);
+                list->entries[list->count].marked = 0;
                 list->count++;
             }
             free(fullpath);

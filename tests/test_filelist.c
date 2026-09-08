@@ -76,6 +76,19 @@ int main(void) {
     assert(strcmp(list.entries[3].name, "b.txt") == 0);
     assert(!list.entries[3].is_dir);
 
+    /* Multiselection can mark several entries and clear them as a group. */
+    assert(count_marked_files(&list) == 0);
+    toggle_file_mark(&list, 1);
+    toggle_file_mark(&list, 3);
+    assert(list.entries[1].marked);
+    assert(list.entries[3].marked);
+    assert(count_marked_files(&list) == 2);
+    toggle_file_mark(&list, 1);
+    assert(!list.entries[1].marked);
+    assert(count_marked_files(&list) == 1);
+    clear_file_marks(&list);
+    assert(count_marked_files(&list) == 0);
+
     /* Selection follows each directory when navigating away and back. */
     list.selected = 2;
     load_directory(&list, subdir);
