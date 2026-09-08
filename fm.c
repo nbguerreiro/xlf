@@ -5,7 +5,7 @@
 #include "util.h"
 #include "preview.h"
 #include "ui.h"
-#include "commands.h"
+#include "commands.h"\n#include "history.h"
 #include <stdlib.h>
 #include <string.h>
 #include <strings.h>
@@ -475,7 +475,7 @@ static void open_selected_file(void);
 static void command_rename(void);
 static void command_search(void);
 static void command_parent(void);
-static void command_enter(void);
+static void command_enter(void);\nstatic void command_history(void);
 
 static const InternalCommand internal_commands[] = {
     {"open", "o", open_selected_file},
