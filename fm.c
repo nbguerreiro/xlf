@@ -26,7 +26,6 @@
 #include <gdk-pixbuf/gdk-pixbuf.h>
 #include <gio/gio.h>
 #include <fontconfig/fontconfig.h>
-#include <wordexp.h>
 
 #define BG_R 223
 #define BG_G 191
@@ -198,46 +197,192 @@ static int parse_dmenu_argv(char ***argv_out, size_t *argc_out) {
     const char *config = getenv("DMENU");
     if (!config || !*config) config = "dmenu";
 
-    wordexp_t words;
-    memset(&words, 0, sizeof(words));
-    if (wordexp(config, &words, WRDE_NOCMD | WRDE_SHOWERR) != 0 ||
-        words.we_wordc == 0) {
-        wordfree(&words);
+    size_t capacity = 8;
+    size_t argc = 0;
+    char **argv = calloc(capacity, sizeof(*argv));
+    if (!argv) return -1;
+
+    size_t token_capacity = 64;
+    size_t token_len = 0;
+    char *token = malloc(token_capacity);
+    if (!token) {
+        free(argv);
         return -1;
     }
 
-    char **argv = calloc(words.we_wordc + 3, sizeof(*argv));
-    if (!argv) {
-        wordfree(&words);
-        return -1;
-    }
+    int in_single_quote = 0;
+    int in_double_quote = 0;
+    int escaped = 0;
+    int token_started = 0;
 
-    for (size_t i = 0; i < words.we_wordc; ++i) {
-        argv[i] = strdup(words.we_wordv[i]);
-        if (!argv[i]) {
-            for (size_t j = 0; j < i; ++j) free(argv[j]);
-            free(argv);
-            wordfree(&words);
-            return -1;
+    for (const char *p = config;; ++p) {
+        unsigned char ch = (unsigned char)*p;
+        int end_of_token = (ch == '\0');
+
+        if (escaped) {
+            if (end_of_token) {
+                free(token);
+                for (size_t i = 0; i < argc; ++i) free(argv[i]);
+                free(argv);
+                return -1;
+            }
+            if (token_len + 1 >= token_capacity) {
+                token_capacity *= 2;
+                char *grown = realloc(token, token_capacity);
+                if (!grown) {
+                    free(token);
+                    for (size_t i = 0; i < argc; ++i) free(argv[i]);
+                    free(argv);
+                    return -1;
+                }
+                token = grown;
+            }
+            token[token_len++] = (char)ch;
+            token_started = 1;
+            escaped = 0;
+            continue;
+        }
+
+        if (in_single_quote) {
+            if (ch == '\0') {
+                free(token);
+                for (size_t i = 0; i < argc; ++i) free(argv[i]);
+                free(argv);
+                return -1;
+            }
+            if (ch == '\'') {
+                in_single_quote = 0;
+            } else {
+                if (token_len + 1 >= token_capacity) {
+                    token_capacity *= 2;
+                    char *grown = realloc(token, token_capacity);
+                    if (!grown) {
+                        free(token);
+                        for (size_t i = 0; i < argc; ++i) free(argv[i]);
+                        free(argv);
+                        return -1;
+                    }
+                    token = grown;
+                }
+                token[token_len++] = (char)ch;
+                token_started = 1;
+            }
+            continue;
+        }
+
+        if (in_double_quote) {
+            if (ch == '\0') {
+                free(token);
+                for (size_t i = 0; i < argc; ++i) free(argv[i]);
+                free(argv);
+                return -1;
+            }
+            if (ch == '"') {
+                in_double_quote = 0;
+            } else if (ch == '\\') {
+                escaped = 1;
+            } else {
+                if (token_len + 1 >= token_capacity) {
+                    token_capacity *= 2;
+                    char *grown = realloc(token, token_capacity);
+                    if (!grown) {
+                        free(token);
+                        for (size_t i = 0; i < argc; ++i) free(argv[i]);
+                        free(argv);
+                        return -1;
+                    }
+                    token = grown;
+                }
+                token[token_len++] = (char)ch;
+                token_started = 1;
+            }
+            continue;
+        }
+
+        if (end_of_token || ch == ' ' || ch == '\t' || ch == '\n') {
+            if (token_started) {
+                if (argc + 1 >= capacity) {
+                    capacity *= 2;
+                    char **grown = realloc(argv, capacity * sizeof(*argv));
+                    if (!grown) {
+                        free(token);
+                        for (size_t i = 0; i < argc; ++i) free(argv[i]);
+                        free(argv);
+                        return -1;
+                    }
+                    argv = grown;
+                }
+                token[token_len] = '\0';
+                argv[argc] = strdup(token);
+                if (!argv[argc]) {
+                    free(token);
+                    for (size_t i = 0; i < argc; ++i) free(argv[i]);
+                    free(argv);
+                    return -1;
+                }
+                ++argc;
+                token_len = 0;
+                token_started = 0;
+            }
+            if (end_of_token) break;
+            continue;
+        }
+
+        if (ch == '\'') {
+            in_single_quote = 1;
+            token_started = 1;
+        } else if (ch == '"') {
+            in_double_quote = 1;
+            token_started = 1;
+        } else if (ch == '\\') {
+            escaped = 1;
+            token_started = 1;
+        } else {
+            if (token_len + 1 >= token_capacity) {
+                token_capacity *= 2;
+                char *grown = realloc(token, token_capacity);
+                if (!grown) {
+                    free(token);
+                    for (size_t i = 0; i < argc; ++i) free(argv[i]);
+                    free(argv);
+                    return -1;
+                }
+                token = grown;
+            }
+            token[token_len++] = (char)ch;
+            token_started = 1;
         }
     }
 
+    free(token);
+
     char window_id[32];
     snprintf(window_id, sizeof(window_id), "%lu", (unsigned long)win);
-    argv[words.we_wordc] = strdup("-w");
-    argv[words.we_wordc + 1] = strdup(window_id);
-    argv[words.we_wordc + 2] = NULL;
 
-    if (!argv[words.we_wordc] || !argv[words.we_wordc + 1]) {
-        for (size_t i = 0; i < words.we_wordc + 2; ++i) free(argv[i]);
+    if (argc + 3 > capacity) {
+        char **grown = realloc(argv, (argc + 3) * sizeof(*argv));
+        if (!grown) {
+            for (size_t i = 0; i < argc; ++i) free(argv[i]);
+            free(argv);
+            return -1;
+        }
+        argv = grown;
+        capacity = argc + 3;
+    }
+
+    argv[argc] = strdup("-w");
+    argv[argc + 1] = strdup(window_id);
+    argv[argc + 2] = NULL;
+    if (!argv[argc] || !argv[argc + 1]) {
+        free(argv[argc]);
+        free(argv[argc + 1]);
+        for (size_t i = 0; i < argc; ++i) free(argv[i]);
         free(argv);
-        wordfree(&words);
         return -1;
     }
 
     *argv_out = argv;
-    *argc_out = words.we_wordc + 2;
-    wordfree(&words);
+    *argc_out = argc + 2;
     return 0;
 }
 
