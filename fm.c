@@ -498,7 +498,7 @@ static const InternalCommand internal_commands[] = {
     (sizeof(internal_commands) / sizeof(internal_commands[0]))
 
 static const ExternalCommand *find_external_command(const char *name) {
-    for (size_t i = 0; i < EXTERNAL_COMMAND_COUNT; ++i) {
+    for (size_t i = 0; external_commands[i].name != NULL; ++i) {
         if (external_commands[i].name &&
             strcmp(external_commands[i].name, name) == 0) {
             return &external_commands[i];
@@ -579,7 +579,7 @@ static void show_command_menu(void) {
     for (size_t i = 0; i < INTERNAL_COMMAND_COUNT; ++i) {
         capacity += strlen(internal_commands[i].name) + 1;
     }
-    for (size_t i = 0; i < EXTERNAL_COMMAND_COUNT; ++i) {
+    for (size_t i = 0; external_commands[i].name != NULL; ++i) {
         if (external_commands[i].name) {
             capacity += strlen(external_commands[i].name) + 1;
         }
@@ -595,7 +595,7 @@ static void show_command_menu(void) {
         offset += len;
         menu[offset++] = '\n';
     }
-    for (size_t i = 0; i < EXTERNAL_COMMAND_COUNT; ++i) {
+    for (size_t i = 0; external_commands[i].name != NULL; ++i) {
         if (!external_commands[i].name) continue;
         size_t len = strlen(external_commands[i].name);
         memcpy(menu + offset, external_commands[i].name, len);
@@ -859,7 +859,7 @@ void handle_key(XKeyEvent *ev) {
                 return;
             }
         }
-        for (size_t i = 0; i < EXTERNAL_COMMAND_COUNT; ++i) {
+        for (size_t i = 0; external_commands[i].name != NULL; ++i) {
             if (command_key_matches(external_commands[i].key, ks, ev->state)) {
                 run_external_command(&external_commands[i]);
                 return;
