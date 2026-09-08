@@ -5,6 +5,7 @@
 #include "util.h"
 #include "preview.h"
 #include "ui.h"
+#include "commands.h"
 #include <stdlib.h>
 #include <string.h>
 #include <strings.h>
@@ -189,6 +190,235 @@ static void trash_selected_file(void) {
     int old_selected = file_list.selected;
     if (run_trash_command(path) == 0) {
         refresh_after_file_change(old_selected);
+    }
+}
+
+static int parse_dmenu_argv(char ***argv_out, size_t *argc_out) {
+    const char *config = getenv("DMENU");
+    if (!config || !*config) config = "dmenu";
+
+    wordexp_t words;
+    memset(&words, 0, sizeof(words));
+    if (wordexp(config, &words, WRDE_NOCMD | WRDE_SHOWERR) != 0 ||
+        words.we_wordc == 0) {
+        wordfree(&words);
+        return -1;
+    }
+
+    char **argv = calloc(words.we_wordc + 3, sizeof(*argv));
+    if (!argv) {
+        wordfree(&words);
+        return -1;
+    }
+
+    for (size_t i = 0; i < words.we_wordc; ++i) {
+        argv[i] = strdup(words.we_wordv[i]);
+        if (!argv[i]) {
+            for (size_t j = 0; j < i; ++j) free(argv[j]);
+            free(argv);
+            wordfree(&words);
+            return -1;
+        }
+    }
+
+    char window_id[32];
+    snprintf(window_id, sizeof(window_id), "%lu", (unsigned long)win);
+    argv[words.we_wordc] = strdup("-w");
+    argv[words.we_wordc + 1] = strdup(window_id);
+    argv[words.we_wordc + 2] = NULL;
+
+    if (!argv[words.we_wordc] || !argv[words.we_wordc + 1]) {
+        for (size_t i = 0; i < words.we_wordc + 2; ++i) free(argv[i]);
+        free(argv);
+        wordfree(&words);
+        return -1;
+    }
+
+    *argv_out = argv;
+    *argc_out = words.we_wordc + 2;
+    wordfree(&words);
+    return 0;
+}
+
+static void free_dmenu_argv(char **argv, size_t argc) {
+    if (!argv) return;
+    for (size_t i = 0; i < argc; ++i) free(argv[i]);
+    free(argv);
+}
+
+static char *run_dmenu(const char *input) {
+    char **argv = NULL;
+    size_t argc = 0;
+    if (parse_dmenu_argv(&argv, &argc) != 0) return NULL;
+
+    int input_pipe[2];
+    int output_pipe[2];
+    if (pipe(input_pipe) != 0 || pipe(output_pipe) != 0) {
+        if (input_pipe[0] >= 0) {
+            close(input_pipe[0]);
+            close(input_pipe[1]);
+        }
+        free_dmenu_argv(argv, argc);
+        return NULL;
+    }
+
+    pid_t pid = fork();
+    if (pid < 0) {
+        close(input_pipe[0]);
+        close(input_pipe[1]);
+        close(output_pipe[0]);
+        close(output_pipe[1]);
+        free_dmenu_argv(argv, argc);
+        return NULL;
+    }
+
+    if (pid == 0) {
+        dup2(input_pipe[0], STDIN_FILENO);
+        dup2(output_pipe[1], STDOUT_FILENO);
+        close(input_pipe[0]);
+        close(input_pipe[1]);
+        close(output_pipe[0]);
+        close(output_pipe[1]);
+        execvp(argv[0], argv);
+        _exit(127);
+    }
+
+    close(input_pipe[0]);
+    close(output_pipe[1]);
+
+    size_t input_len = input ? strlen(input) : 0;
+    size_t written = 0;
+    while (written < input_len) {
+        ssize_t n = write(input_pipe[1], input + written, input_len - written);
+        if (n < 0) {
+            if (errno == EINTR) continue;
+            break;
+        }
+        written += (size_t)n;
+    }
+    close(input_pipe[1]);
+
+    char result[PATH_MAX];
+    size_t result_len = 0;
+    while (result_len + 1 < sizeof(result)) {
+        ssize_t n = read(output_pipe[0], result + result_len,
+                         sizeof(result) - result_len - 1);
+        if (n < 0) {
+            if (errno == EINTR) continue;
+            break;
+        }
+        if (n == 0) break;
+        result_len += (size_t)n;
+    }
+    close(output_pipe[0]);
+
+    int status;
+    while (waitpid(pid, &status, 0) < 0) {
+        if (errno != EINTR) break;
+    }
+    free_dmenu_argv(argv, argc);
+
+    if (result_len == 0) return NULL;
+    result[result_len] = '\0';
+    result[strcspn(result, "\r\n")] = '\0';
+    if (result[0] == '\0') return NULL;
+    return strdup(result);
+}
+
+static const ExternalCommand *find_external_command(const char *name) {
+    for (size_t i = 0; i < EXTERNAL_COMMAND_COUNT; ++i) {
+        if (external_commands[i].name &&
+            strcmp(external_commands[i].name, name) == 0) {
+            return &external_commands[i];
+        }
+    }
+    return NULL;
+}
+
+static void run_external_command(const ExternalCommand *command) {
+    if (!command || !command->command || file_list.count <= 0) return;
+
+    const FileEntry *entry = &file_list.entries[file_list.selected];
+    char path[PATH_MAX];
+    int n = snprintf(path, sizeof(path), "%s/%s",
+                     file_list.path ? file_list.path : ".",
+                     entry->name);
+    if (n < 0 || (size_t)n >= sizeof(path)) {
+        set_status("Command path is too long");
+        return;
+    }
+
+    pid_t pid = fork();
+    if (pid < 0) {
+        set_status("Could not start command");
+        return;
+    }
+    if (pid == 0) {
+        execlp(command->command, command->command, path, (char *)NULL);
+        _exit(127);
+    }
+
+    set_status(command->name ? command->name : "Command started");
+}
+
+static void show_external_command_menu(void) {
+    if (EXTERNAL_COMMAND_COUNT == 0) {
+        set_status("No external commands configured");
+        return;
+    }
+
+    size_t capacity = 1;
+    for (size_t i = 0; i < EXTERNAL_COMMAND_COUNT; ++i) {
+        if (external_commands[i].name) {
+            capacity += strlen(external_commands[i].name) + 1;
+        }
+    }
+
+    char *menu = calloc(capacity, 1);
+    if (!menu) return;
+
+    size_t offset = 0;
+    for (size_t i = 0; i < EXTERNAL_COMMAND_COUNT; ++i) {
+        if (!external_commands[i].name) continue;
+        size_t len = strlen(external_commands[i].name);
+        memcpy(menu + offset, external_commands[i].name, len);
+        offset += len;
+        menu[offset++] = '\n';
+    }
+    menu[offset] = '\0';
+
+    char *selection = run_dmenu(menu);
+    free(menu);
+    if (!selection) return;
+
+    const ExternalCommand *command = find_external_command(selection);
+    if (command) {
+        run_external_command(command);
+    }
+    free(selection);
+}
+
+static int external_command_key_matches(const ExternalCommand *command,
+                                         KeySym ks, unsigned int state) {
+    if (!command || !command->key) return 0;
+
+    if (strncmp(command->key, "C-", 2) == 0 &&
+        command->key[2] != '\0' && command->key[3] == '\0') {
+        char key = command->key[2];
+        KeySym expected = (KeySym)(unsigned char)key;
+        if (key >= 'a' && key <= 'z') expected = (KeySym)(key - 'a' + 'A');
+        return (state & ControlMask) != 0 && (ks == expected || ks == expected + ('a' - 'A'));
+    }
+
+    return 0;
+}
+
+static void run_external_command_key(KeySym ks, unsigned int state) {
+    for (size_t i = 0; i < EXTERNAL_COMMAND_COUNT; ++i) {
+        if (external_command_key_matches(&external_commands[i], ks, state)) {
+            run_external_command(&external_commands[i]);
+            return;
+        }
     }
 }
 
@@ -405,6 +635,13 @@ void handle_key(XKeyEvent *ev) {
         return;
     }
 
+    run_external_command_key(ks, ev->state);
+    for (size_t i = 0; i < EXTERNAL_COMMAND_COUNT; ++i) {
+        if (external_command_key_matches(&external_commands[i], ks, ev->state)) {
+            return;
+        }
+    }
+
     if (search_active) {
         if (ks == XK_Up || ks == XK_Down) {
             int next = ui_next_search_match(file_list.selected, ks == XK_Down ? 1 : -1);
@@ -419,6 +656,9 @@ void handle_key(XKeyEvent *ev) {
     }
 
     switch (ks) {
+        case XK_colon:
+            show_external_command_menu();
+            break;
         case XK_slash:
             search_active = 1;
             search_query_len = 0;
