@@ -7,6 +7,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <limits.h>
+#include <unistd.h>
 
 void init_file_list(FileList *list, const char *path) {
     list->entries = NULL;
@@ -140,6 +142,14 @@ void load_directory(FileList *list, const char *path) {
     DIR *dir;
     const struct dirent *ent;
     struct stat st;
+    char cwd[PATH_MAX];
+    const char *load_path = path;
+
+    /* Keep the initial directory absolute so parent navigation never
+       transitions through the relative paths "." and "..". */
+    if (path && strcmp(path, ".") == 0 && getcwd(cwd, sizeof(cwd)) != NULL) {
+        load_path = cwd;
+    }
 
     remember_selection(list);
 
@@ -153,17 +163,17 @@ void load_directory(FileList *list, const char *path) {
     list->count = 0;
     list->capacity = 0;
     list->selected = 0;
-    list->path = strdup(path);
+    list->path = strdup(load_path);
     if (!list->path) list->path = NULL;
 
-    if ((dir = opendir(path)) != NULL) {
+    if ((dir = opendir(load_path)) != NULL) {
         while ((ent = readdir(dir)) != NULL) {
             if (strcmp(ent->d_name, ".") == 0 ||
                 strcmp(ent->d_name, "..") == 0) {
                 continue;
             }
 
-            char *fullpath = path_join(path, ent->d_name);
+            char *fullpath = path_join(load_path, ent->d_name);
             if (!fullpath) continue;
 
             if (stat(fullpath, &st) == 0) {
