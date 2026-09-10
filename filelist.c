@@ -82,6 +82,32 @@ static void restore_selection(FileList *list) {
     }
 }
 
+/* When loading a parent directory, select the child directory we just left.
+   This is deliberately separate from the general selection history: the
+   parent may already have a remembered selection, but going up should always
+   land on the directory that contains us. */
+static void select_previous_directory(FileList *list, const char *old_path) {
+    if (!list || !list->path || !old_path || !*old_path) return;
+
+    const char *slash = strrchr(old_path, '/');
+    if (!slash || slash[1] == '\0') return;
+
+    size_t parent_len = (slash == old_path) ? 1U : (size_t)(slash - old_path);
+    if (strlen(list->path) != parent_len ||
+        strncmp(list->path, old_path, parent_len) != 0) {
+        return;
+    }
+
+    const char *child_name = slash + 1;
+    for (int i = 0; i < list->count; ++i) {
+        if (strcmp(list->entries[i].name, child_name) == 0 &&
+            list->entries[i].is_dir) {
+            list->selected = i;
+            return;
+        }
+    }
+}
+
 void free_file_list(FileList *list) {
     if (!list) return;
     if (list->entries) {
@@ -144,6 +170,7 @@ void load_directory(FileList *list, const char *path) {
     struct stat st;
     char cwd[PATH_MAX];
     const char *load_path = path;
+    char *old_path = list->path ? strdup(list->path) : NULL;
 
     /* Keep the initial directory absolute so parent navigation never
        transitions through the relative paths "." and "..". */
@@ -182,6 +209,7 @@ void load_directory(FileList *list, const char *path) {
                     FileEntry *tmp = realloc(list->entries,
                                              newcap * sizeof(FileEntry));
                     if (!tmp) {
+                        free(fullpath);
                         break;
                     }
                     list->entries = tmp;
@@ -189,7 +217,10 @@ void load_directory(FileList *list, const char *path) {
                 }
 
                 char *name = strdup(ent->d_name);
-                if (!name) continue;
+                if (!name) {
+                    free(fullpath);
+                    continue;
+                }
 
                 list->entries[list->count].name = name;
                 list->entries[list->count].is_dir = S_ISDIR(st.st_mode);
@@ -206,4 +237,6 @@ void load_directory(FileList *list, const char *path) {
     }
 
     restore_selection(list);
+    select_previous_directory(list, old_path);
+    free(old_path);
 }
