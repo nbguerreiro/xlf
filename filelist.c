@@ -165,6 +165,10 @@ int compare_entries(const void *a, const void *b) {
 }
 
 void load_directory(FileList *list, const char *path) {
+    if (!path) {
+        return;
+    }
+    
     DIR *dir;
     const struct dirent *ent;
     struct stat st;
