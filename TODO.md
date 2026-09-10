@@ -56,21 +56,21 @@
   - [x] Control-click context menu using dmenu: open a dmenu-based context menu for the clicked item and expose relevant file operations. (effort: medium)
 
 
-[ ] bug: if I go back more than one directory, it brings me back to the first folder (some sort of loop?)
+- [ ] bug: if I go back more than one directory, it brings me back to the first folder (some sort of loop?)
 
-[ ] fm should be renamed xlf
+- [ ] fm should be renamed xlf
 
-[ ] a server/client mechanism so different instances of xlf can communicate with each other. for example copy on one instance, paste on another.
+- [ ] a server/client mechanism so different instances of xlf can communicate with each other. for example copy on one instance, paste on another.
 
-[ ] control-click should also be right-click
+- [ ] control-click should also be right-click
 
-[ ] preview should use external "previewer.sh" for all items, except images
+- [ ] preview should use external "previewer.sh" for all items, except images
 
-[ ] cd command
+- [ ] cd command
 
-[ ] on the top bar of the right pane, information appears as "drwx------ 6 1000 1000 ...". it should be "drwx------ 6 fx fx ...". "fx" being the user with UID 1000.
+- [ ] on the top bar of the right pane, information appears as "drwx------ 6 1000 1000 ...". it should be "drwx------ 6 fx fx ...". "fx" being the user with UID 1000.
 
-[ ] mouse wheel to scroll
+- [ ] mouse wheel to scroll
 
-[ ] show/hide dot files
+- [ ] show/hide dot files
 
