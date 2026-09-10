@@ -881,7 +881,10 @@ static void command_parent(void) {
     } else if (strcmp(file_list.path, "/") != 0) {
         const char *last_slash = strrchr(file_list.path, '/');
         char parent_path[PATH_MAX];
-        if (last_slash && last_slash > file_list.path) {
+        if (last_slash == file_list.path) {
+            parent_path[0] = '/';
+            parent_path[1] = '\0';
+        } else if (last_slash > file_list.path) {
             size_t len = (size_t)(last_slash - file_list.path);
             if (len >= sizeof(parent_path)) return;
             memcpy(parent_path, file_list.path, len);

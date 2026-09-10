@@ -185,6 +185,30 @@ void free_preview_result(PreviewResult *result) {
     result->kind = PREVIEW_RESULT_NONE;
 }
 
+static void restore_preview_directory_selection(FileList *list) {
+    if (!list || !list->path || !list->entries || list->count <= 0 ||
+        !file_list.selection_history) {
+        return;
+    }
+
+    for (size_t i = 0; i < file_list.selection_history_count; ++i) {
+        SelectionMemory *memory = &file_list.selection_history[i];
+
+        if (!memory->path || !memory->name ||
+            strcmp(memory->path, list->path) != 0) {
+            continue;
+        }
+
+        for (int j = 0; j < list->count; ++j) {
+            if (strcmp(list->entries[j].name, memory->name) == 0) {
+                list->selected = j;
+                return;
+            }
+        }
+        return;
+    }
+}
+
 void apply_preview_result() {
     PreviewResult result;
 
@@ -234,6 +258,7 @@ void apply_preview_result() {
             result.directory = (FileList){NULL, 0, 0, 0, NULL};
             result.has_directory = 0;
             preview_is_dir = 1;
+            restore_preview_directory_selection(&preview_list);
             break;
         case PREVIEW_RESULT_IMAGE:
             preview_image = result.image;
@@ -515,7 +540,6 @@ void stop_preview_worker() {
     preview_wake_pipe[1] = -1;
 }
 
-
 extern void draw_info_bar(cairo_t *cr, int x, int y, int width);
 extern void draw_image(cairo_t *cr, int x, int y, int width, int height);
 extern void draw_file_entries(cairo_t *cr, FileList *list, int x, int y, int width, int height);
@@ -644,7 +668,7 @@ void draw_image(cairo_t *cr, int x, int y, int width, int height) {
             GdkPixbuf *with_alpha = gdk_pixbuf_add_alpha(scaled, FALSE, 0, 0, 0);
             g_object_unref(scaled);
             scaled = with_alpha;
-            }
+        }
         
         guchar *pixels = gdk_pixbuf_get_pixels(scaled);
         int rowstride = gdk_pixbuf_get_rowstride(scaled);
@@ -742,13 +766,12 @@ void draw_image(cairo_t *cr, int x, int y, int width, int height) {
     g_object_unref(scaled);
 }
 
-
-int is_image_file(const char *filename);
-int is_pdf_file(const char *filename);
-int is_text_file(const char *filename);
-int is_html_file(const char *filename);
-int is_mp3_file(const char *filename);
-int is_media_file(const char *filename);
+extern int is_image_file(const char *filename);
+extern int is_pdf_file(const char *filename);
+extern int is_text_file(const char *filename);
+extern int is_html_file(const char *filename);
+extern int is_mp3_file(const char *filename);
+extern int is_media_file(const char *filename);
 
 
 FileType detect_file_type_mime(const char *path) {
@@ -1073,4 +1096,3 @@ char *load_mp3_info(const char *path) {
     }
     return load_text_preview("mp3info", "-x", NULL, path);
 }
-
