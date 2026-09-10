@@ -22,7 +22,7 @@ typedef struct {
 } ExternalCommand;
 
 static const ExternalCommand external_commands[] = {
-    /* {"com", "com.sh", "C-i"}, */
+    {"notify", "notify-send", "C-n"},
     {NULL, NULL, NULL}
 };
 

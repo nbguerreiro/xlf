@@ -46,17 +46,23 @@
   - [x] get_absolute_path: return NULL on realpath failure instead of returning a non-absolute fallback. (effort: small)
   - [x] Minor key-handling improvements: use XLookupString/Xkb to handle modifiers and international layouts. (effort: small)
 
-
-## Current status
-
-The original TODO list is complete through item 9.3. All 19 listed implementation items are marked complete.
-
-The remaining work is maintenance and future feature development rather than unfinished items from this checklist.
-
 10) Navigation / selection state
   - [x] Remember the selected item for each directory when navigating away and restore it when returning. (effort: small)
 
-11) Future usability features\n  - [x] Persistent command history stored under $XDG_STATE_HOME/fm (or ~/.local/state/fm). (effort: small)
+11) Future usability features
+  - [x] Persistent command history stored under $XDG_STATE_HOME/fm (or ~/.local/state/fm). (effort: small)
   - [x] Configurable external commands: define commands and optional keybindings in commands.h; expose internal and external commands through the unified ':' dmenu menu, with dmenu used for interactive prompts such as rename and search. (effort: medium)
   - [x] Multiselection: mark multiple files/directories with Space; delete and trash operate on all marked entries (or the current entry when none are marked). (effort: medium)
   - [x] Control-click context menu using dmenu: open a dmenu-based context menu for the clicked item and expose relevant file operations. (effort: medium)
+
+
+[ ] bug: if I go back more than one directory, it brings me back to the first folder (some sort of loop?)
+[ ] fm should be renamed xlf
+[ ] a server/client mechanism so different instances of xlf can communicate with each other. for example copy on one instance, paste on another.
+[ ] control-click should also be right-click
+[ ] preview should use external "previewer.sh" for all items, except images
+[ ] cd command
+[ ] on the top bar of the right pane, information appears as "drwx------ 6 1000 1000 ...". it should be "drwx------ 6 fx fx ...". "fx" being the user with UID 1000.
+[ ] mouse wheel to scroll
+[ ] show/hide dot files
+
