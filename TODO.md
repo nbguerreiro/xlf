@@ -56,7 +56,7 @@
   - [x] Control-click context menu using dmenu: open a dmenu-based context menu for the clicked item and expose relevant file operations. (effort: medium)
 
 
-- [ ] bug: if I go back more than one directory, it brings me back to the first folder (some sort of loop?)
+- [x] bug: if I go back more than one directory, it brings me back to the first folder (some sort of loop?)
 
 - [ ] fm should be renamed xlf
 
