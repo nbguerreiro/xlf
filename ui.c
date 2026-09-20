@@ -196,14 +196,21 @@ int ui_next_search_match(int start, int direction) {
     return (start + direction + file_list.count) % file_list.count;
 }
 
+int ui_scroll_start(int count, int selected, int visible_items) {
+    (void)count;
+    if (selected >= visible_items) return selected - visible_items + 1;
+    return 0;
+}
+
 void draw_file_entries(cairo_t *cr, const FileList *list, int x, int y, int width, int height) {
     cairo_set_source_rgb(cr, BG_R/255.0, BG_G/255.0, BG_B/255.0);
     cairo_rectangle(cr, x, y, width, height);
     cairo_fill(cr);
 
     int visible_items = height / LINE_HEIGHT;
+    int start = ui_scroll_start(list->count, list->selected, visible_items);
     int row = 0;
-    for (int i = 0; i < list->count && row < visible_items; i++) {
+    for (int i = start; i < list->count && row < visible_items; i++) {
         int item_y = y + row * LINE_HEIGHT + MARGIN;
 
         if (i == list->selected) {

@@ -21,6 +21,7 @@ void free_draw_surfaces(void);
 int ensure_draw_surfaces(int width, int height);
 void draw_ui(int win_width, int win_height);
 int ui_next_search_match(int start, int direction);
+int ui_scroll_start(int count, int selected, int visible_items);
 void set_status(const char *message);
 
 #endif

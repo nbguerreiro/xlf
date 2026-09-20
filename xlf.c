@@ -736,10 +736,7 @@ static void context_menu_for_row(const XButtonEvent *ev, int win_width, int win_
     int visible_items = (win_height - PATH_HEIGHT) / LINE_HEIGHT;
     if (visible_items <= 0 || file_list.count <= 0) return;
 
-    int scroll_offset = 0;
-    if (file_list.selected >= visible_items) {
-        scroll_offset = file_list.selected - visible_items + 1;
-    }
+    int scroll_offset = ui_scroll_start(file_list.count, file_list.selected, visible_items);
 
     int row = list_y / LINE_HEIGHT;
     int index = scroll_offset + row;
@@ -760,6 +757,19 @@ void handle_mouse_button(const XButtonEvent *ev, int win_width, int win_height) 
         return;
     }
 
+    if (ev->button == Button4 || ev->button == Button5) {
+        int left_width = (int)(win_width * PANE_RATIO);
+        if (ev->x >= left_width || ev->y < PATH_HEIGHT) return;
+        if (file_list.count <= 0) return;
+        int next = ui_next_search_match(file_list.selected,
+                                        ev->button == Button4 ? -1 : 1);
+        if (next >= 0) {
+            file_list.selected = next;
+            request_preview();
+        }
+        return;
+    }
+
     if (ev->button != Button1) return;
 
     int left_width = (int)(win_width * PANE_RATIO);
@@ -774,10 +784,7 @@ void handle_mouse_button(const XButtonEvent *ev, int win_width, int win_height) 
     int visible_items = (win_height - PATH_HEIGHT) / LINE_HEIGHT;
     if (visible_items <= 0 || file_list.count <= 0) return;
 
-    int scroll_offset = 0;
-    if (file_list.selected >= visible_items) {
-        scroll_offset = file_list.selected - visible_items + 1;
-    }
+    int scroll_offset = ui_scroll_start(file_list.count, file_list.selected, visible_items);
 
     int row = list_y / LINE_HEIGHT;
     int index = scroll_offset + row;
