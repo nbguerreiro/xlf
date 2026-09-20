@@ -4,7 +4,7 @@
 
 xlf is a small X11 graphical file manager written in C. The application is deliberately lightweight and uses a small number of modules:
 
-- **fm.c** — application state, X11 event loop, keyboard/mouse commands, file operations, and startup/shutdown orchestration.
+- **xlf.c** — application state, X11 event loop, keyboard/mouse commands, file operations, and startup/shutdown orchestration.
 - **filelist.c / filelist.h** — directory scanning and the in-memory file-list representation.
 - **preview.c / preview.h** — file-type detection, preview loading, asynchronous preview work, preview state, image caching, and preview rendering.
 - **ui.c / ui.h** — Cairo/Pango drawing, layout objects, double buffering, search/rename presentation, and general UI rendering.
@@ -27,7 +27,7 @@ The application can be viewed as four cooperating layers:
                                     |
                                     v
                          +----------------------+
-                         |        fm.c          |
+                         |        xlf.c         |
                          | application control  |
                          | input + file actions |
                          +----+------------+----+
@@ -86,7 +86,7 @@ The current implementation intentionally uses shared module-level state rather t
 
 ### Core X11 state
 
-Defined in **fm.c**:
+Defined in **xlf.c**:
 
 - `Display *dpy` — X11 display connection.
 - `Window win` — application window.
@@ -695,7 +695,7 @@ The backbuffer is important because it prevents partially rendered frames and re
 
 ## 12. Input and command handling
 
-Input handling lives primarily in **fm.c**.
+Input handling lives primarily in **xlf.c**.
 
 ### File deletion
 
@@ -990,7 +990,7 @@ The intended order is:
 The executable is built from:
 
 ```
-fm.c
+xlf.c
 filelist.c
 util.c
 preview.c
@@ -1059,7 +1059,7 @@ The current five-module split keeps file scanning, preview processing, rendering
 
 ## 22. Function index
 
-### fm.c
+### xlf.c
 
 | Function | Responsibility |
 |---|---|
@@ -1166,14 +1166,14 @@ The current five-module split keeps file scanning, preview processing, rendering
 The codebase has completed the major refactoring into the following modules:
 
 ```
-fm.c          application/control layer
+xlf.c         application/control layer
 filelist.c/h  directory and FileList layer
 preview.c/h   preview/type-detection layer
 ui.c/h        rendering/UI layer
 util.c/h      filesystem/tool utility layer
 ```
 
-The architecture therefore supports further work without returning to the original monolithic `fm.c` design.
+The architecture therefore supports further work without returning to the original monolithic `xlf.c` design.
 
 The main areas that can evolve independently are:
 

@@ -5,12 +5,12 @@ Xlib + Cairo + Pango + GdkPixbuf + GIO, built with gcc/clang and pkg-config.
 
 **Read `DESIGN.md` first** — it is detailed and current (it understates `history.c` /
 `commands.h`, but everything else holds). `.github/copilot-instructions.md` is **stale**:
-it describes the old monolithic single-file `fm.c` design, not the current module split.
+it describes the old monolithic single-file `xlf.c` design, not the current module split.
 
 ## Build & test
 
 - Requires X11 dev libs + cairo/pango/gdk-pixbuf/gio; `make check-deps` refuses to build without them.
-- `make` / `make run` (`./fm`) — run needs a live X11 display, not headless.
+- `make` / `make run` (`./xlf`) — run needs a live X11 display, not headless.
 - `make lint` — `-fsyntax-only`; **known to pass despite warnings** (see gotchas).
 - `make test` — runs three assert-based C test programs (no framework). `make sanitize` builds with ASan+UBSan.
 - `make clean` — also removes test binaries.
@@ -35,18 +35,19 @@ it describes the old monolithic single-file `fm.c` design, not the current modul
   `Del` permanent delete, `Backspace` trash (external `trash`), `Space` mark multi-select,
   `:` dmenu command menu, `q`/Esc quit.
 - `:` menu and Ctrl-click context menu need `dmenu` (override binary via `DMENU` env var).
-- Persistent command history: `$XDG_STATE_HOME/fm/history` or `~/.local/state/fm/history`.
+- Persistent command history: `$XDG_STATE_HOME/xlf/history` or `~/.local/state/xlf/history`
+  (a pre-existing `fm/history` is migrated on first use).
 - `Makefile_novo` is a stale experimental variant (missing `history.c`, outputs `out`). Use `Makefile`.
 
 ## Gotchas
 
 - **`.gitignore` is a whitelist**: it ignores `*` then re-includes `*.c`, `*.h`, `Makefile`,
   `TODO.md`, `.github/**`. Any new non-source file (scripts, docs, fixtures) stays untracked
-  unless you add a `!` rule. `tests/` binaries and `fm` are intentionally ignored.
-- **Do not rename `fm` → `xlf` piecemeal**: it is an acknowledged open task (TODO.md #13).
-  Binary, Makefile `BIN`, history dir, and code identifiers all still say `fm`.
+  unless you add a `!` rule. `tests/` binaries and `xlf` are intentionally ignored.
+- The app is named `xlf` everywhere now (binary, `xlf.c`, history dir under
+  `~/.local/state/xlf`). Keep it that way — no more `fm` strings (TODO.md #13 is done).
 - `FileList` grew a `selection_history` field (filelist.h); several positional aggregate
-  initializers in `fm.c` and `preview.c` were **not** updated, so `make lint` emits
+  initializers in `xlf.c` and `preview.c` were **not** updated, so `make lint` emits
   `-Wmissing-field-initializers` warnings (build still succeeds). When editing `FileList`, update
   the `{NULL, 0, 0, 0, NULL}`-style initializers too.
 - `make test` prints a benign GIO error to stderr (`test_preview_helpers` probing a path with a

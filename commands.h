@@ -4,7 +4,7 @@
 #include <stddef.h>
 
 /*
- * External commands added to fm's unified ':' command menu.
+ * External commands added to xlf's unified ':' command menu.
  *
  * name    - command name shown in dmenu
  * command - executable/script name, resolved through PATH

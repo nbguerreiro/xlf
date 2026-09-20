@@ -4,8 +4,8 @@
 
 ## Build & Run
 
-- **Build:** `make` – compiles `fm.c` to the `fm` binary using gcc
-- **Run:** `./fm` – launches the file manager
+- **Build:** `make` – compiles `xlf.c` to the `xlf` binary using gcc
+- **Run:** `./xlf` – launches the file manager
 - **Clean:** `make clean` – removes the compiled binary
 
 ### Dependencies
@@ -68,5 +68,5 @@ Path changes trigger `update_preview()` to refresh the preview pane.
 
 - Modify `PANE_RATIO`, `LINE_HEIGHT`, color constants at top for layout/styling changes
 - Add new file type support: create `is_*_file()` check, `load_*_preview()` loader, and `draw_*_preview()` renderer
-- Test preview logic with `./fm` and navigate to test files; check `strace` output for external command invocation if preview fails
+- Test preview logic with `./xlf` and navigate to test files; check `strace` output for external command invocation if preview fails
 - Use `make clean && make` to force full rebuild when changing headers or compiler flags

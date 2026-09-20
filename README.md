@@ -1,4 +1,4 @@
-# xlf — simple X11 file manager (fm.c)
+# xlf — simple X11 file manager (xlf.c)
 
 What this is
 - A small file manager using Xlib + Cairo + Pango + GdkPixbuf for previews.
@@ -32,7 +32,7 @@ Build
 
 - Run:
 
-    ./fm
+    ./xlf
 
 Developer helpers
 - Lint (syntax-only):
@@ -60,4 +60,4 @@ Configurable external commands
 - Each entry has a menu name, executable/script name, and optional shortcut such as `C-i`.
 - The selected file's path is passed to the command as argv[1].
 - The dmenu command is taken from the `DMENU` environment variable; if unset, `dmenu` is used.
-- xlf adds `-w <window-id>` so dmenu is associated with the fm window.
+- xlf adds `-w <window-id>` so dmenu is associated with the xlf window.

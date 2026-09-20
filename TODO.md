@@ -50,13 +50,13 @@
   - [x] Remember the selected item for each directory when navigating away and restore it when returning. (effort: small)
 
 11) Future usability features
-  - [x] Persistent command history stored under $XDG_STATE_HOME/fm (or ~/.local/state/fm). (effort: small)
+  - [x] Persistent command history stored under $XDG_STATE_HOME/xlf (or ~/.local/state/xlf). (effort: small)
   - [x] Configurable external commands: define commands and optional keybindings in commands.h; expose internal and external commands through the unified ':' dmenu menu, with dmenu used for interactive prompts such as rename and search. (effort: medium)
   - [x] Multiselection: mark multiple files/directories with Space; delete and trash operate on all marked entries (or the current entry when none are marked). (effort: medium)
   - [x] Control-click context menu using dmenu: open a dmenu-based context menu for the clicked item and expose relevant file operations. (effort: medium)
 
 12) [x] bug: if I go back more than one directory, it brings me back to the first folder (some sort of loop?)
-13) [ ] fm should be renamed xlf everywhere
+13) [x] fm should be renamed xlf everywhere
 14) [ ] a server/client mechanism so different instances of xlf can communicate with each other. for example copy on one instance, paste on another.
 15) [ ] control-click should also be right-click
 16) [ ] preview should use external "previewer.sh" for all items, except images

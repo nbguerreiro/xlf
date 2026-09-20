@@ -5,9 +5,9 @@ CFLAGS ?= -std=c11 -O2 -Wall -Wextra
 CFLAGS += $(PKG_CFLAGS)
 LDFLAGS ?=
 LDFLAGS += $(PKG_LIBS) -pthread
-SRC := fm.c filelist.c util.c preview.c ui.c history.c
+SRC := xlf.c filelist.c util.c preview.c ui.c history.c
 HEADERS := commands.h history.h
-BIN := fm
+BIN := xlf
 
 .PHONY: all run clean sanitize sanitize-test lint test deps check-deps
 
@@ -23,7 +23,7 @@ run: $(BIN)
 	./$(BIN)
 
 clean:
-	rm -f $(BIN) tests/test_filelist tests/test_type_detection tests/test_preview_helpers tests/test_filelist_sanitize tests/test_type_detection_sanitize tests/test_preview_helpers_sanitize
+	rm -f $(BIN) fm tests/test_filelist tests/test_type_detection tests/test_preview_helpers tests/test_filelist_sanitize tests/test_type_detection_sanitize tests/test_preview_helpers_sanitize
 
 sanitize: CFLAGS += -g -O1 -fsanitize=address,undefined -fno-omit-frame-pointer
 sanitize: clean $(BIN)

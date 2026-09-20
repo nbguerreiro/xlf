@@ -76,7 +76,7 @@ jobs:
         run: make clean all
 
       - name: Smoke test binary
-        run: test -x ./fm
+        run: test -x ./xlf
 
   static-analysis:
     name: Static analysis
@@ -118,7 +118,7 @@ jobs:
             --enable=warning,style,performance,portability \
             --error-exitcode=1 \
             --inline-suppr \
-            fm.c
+            xlf.c
 
   test:
     name: Tests
@@ -159,9 +159,9 @@ jobs:
       - name: Build
         run: make clean all
 
-      - name: Upload fm binary
+      - name: Upload xlf binary
         uses: actions/upload-artifact@v4
         with:
-          name: fm-linux-x86_64
-          path: fm
+          name: xlf-linux-x86_64
+          path: xlf
           if-no-files-found: error

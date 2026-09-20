@@ -16,24 +16,42 @@ static int ensure_directory(const char *path) {
     return errno == EEXIST ? 0 : -1;
 }
 
+static int build_history_path(const char *subdir, char *path, size_t size) {
+    const char *state = getenv("XDG_STATE_HOME");
+    if (!state || !*state) {
+        const char *home = getenv("HOME");
+        if (!home || !*home) return -1;
+        int n = snprintf(path, size, "%s/.local/state/%s/history", home, subdir);
+        return (n < 0 || (size_t)n >= size) ? -1 : 0;
+    }
+    int n = snprintf(path, size, "%s/%s/history", state, subdir);
+    return (n < 0 || (size_t)n >= size) ? -1 : 0;
+}
+
+static void migrate_old_history(const char *new_path) {
+    char old_path[PATH_MAX];
+    if (access(new_path, F_OK) == 0) return;
+    if (build_history_path("fm", old_path, sizeof(old_path)) != 0) return;
+    if (access(old_path, F_OK) != 0) return;
+    (void)rename(old_path, new_path);
+}
+
 static int history_path(char *path, size_t size) {
     const char *state = getenv("XDG_STATE_HOME");
     if (!state || !*state) {
         const char *home = getenv("HOME");
         if (!home || !*home) return -1;
-        int n = snprintf(path, size, "%s/.local/state/fm/history", home);
-        if (n < 0 || (size_t)n >= size) return -1;
+        if (build_history_path("xlf", path, size) != 0) return -1;
 
         char dir[PATH_MAX];
-        n = snprintf(dir, sizeof(dir), "%s/.local", home);
+        int n = snprintf(dir, sizeof(dir), "%s/.local", home);
         if (n < 0 || (size_t)n >= sizeof(dir) || ensure_directory(dir) != 0)
             return -1;
         n = snprintf(dir, sizeof(dir), "%s/.local/state", home);
         if (n < 0 || (size_t)n >= sizeof(dir) || ensure_directory(dir) != 0)
             return -1;
     } else {
-        int n = snprintf(path, size, "%s/fm/history", state);
-        if (n < 0 || (size_t)n >= size) return -1;
+        if (build_history_path("xlf", path, size) != 0) return -1;
         if (ensure_directory(state) != 0) return -1;
     }
 
@@ -44,7 +62,9 @@ static int history_path(char *path, size_t size) {
     if (len == 0 || len >= sizeof(dir)) return -1;
     memcpy(dir, path, len);
     dir[len] = '\0';
-    return ensure_directory(dir);
+    int ok = ensure_directory(dir);
+    if (ok == 0) migrate_old_history(path);
+    return ok;
 }
 
 int history_add(const char *command) {
