@@ -963,18 +963,20 @@ This keeps optional preview functionality separable without requiring runtime co
 
 ### Startup
 
-`main()`:
+`main()`, takes an optional starting directory argument (defaults to `.`):
 
-1. Opens the X11 display.
-2. Determines the default screen.
-3. Creates the window with a background matching the UI.
-4. Selects keyboard, mouse, expose, and resize events.
-5. Maps the window.
-6. Initializes the main `FileList`.
-7. Loads the initial directory.
-8. Checks optional external tools.
-9. Starts the preview worker.
-10. Enters the X11/event-processing loop.
+1. Validates the argument, if any, and resolves it to an absolute path
+   (`~` and relative paths are accepted; it must be an existing directory).
+2. Opens the X11 display.
+3. Determines the default screen.
+4. Creates the window with a background matching the UI.
+5. Selects keyboard, mouse, expose, and resize events.
+6. Maps the window.
+7. Initializes the main `FileList`.
+8. Loads the starting directory.
+9. Checks optional external tools.
+10. Starts the preview worker.
+11. Enters the X11/event-processing loop.
 
 ### Normal event cycle
 

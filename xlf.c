@@ -1194,13 +1194,50 @@ void handle_key(XKeyEvent *ev) {
     }
 }
 
-int main() {
+int main(int argc, char *argv[]) {
     dpy = XOpenDisplay(NULL);
     if (!dpy) {
         fprintf(stderr, "Cannot open display\n");
         return 1;
     }
     screen = DefaultScreen(dpy);
+
+    /* Optional starting directory: resolve to an absolute path up front so
+       parent navigation works from the very first frame. */
+    char start_path[PATH_MAX];
+    const char *initial = ".";
+    if (argc > 1) {
+        const char *arg = argv[1];
+        char expanded[PATH_MAX];
+        if (arg[0] == '~' && (arg[1] == '\0' || arg[1] == '/')) {
+            const char *home = getenv("HOME");
+            if (!home || home[0] == '\0') home = ".";
+            int n = snprintf(expanded, sizeof(expanded), "%s%s", home, arg + 1);
+            if (n < 0 || (size_t)n >= sizeof(expanded)) {
+                fprintf(stderr, "xlf: argument path is too long\n");
+                return 1;
+            }
+            arg = expanded;
+        }
+
+        struct stat st;
+        if (stat(arg, &st) != 0) {
+            fprintf(stderr, "xlf: %s: no such path\n", arg);
+            return 1;
+        }
+        if (!S_ISDIR(st.st_mode)) {
+            fprintf(stderr, "xlf: %s: not a directory\n", arg);
+            return 1;
+        }
+        char *abs = get_absolute_path(arg);
+        if (!abs) {
+            fprintf(stderr, "xlf: %s: could not resolve path\n", arg);
+            return 1;
+        }
+        snprintf(start_path, sizeof(start_path), "%s", abs);
+        free(abs);
+        initial = start_path;
+    }
 
     int win_width = 800;
     int win_height = 600;
@@ -1224,8 +1261,8 @@ int main() {
     XSelectInput(dpy, win, ExposureMask | KeyPressMask | ButtonPressMask | StructureNotifyMask);
     XMapWindow(dpy, win);
 
-    init_file_list(&file_list, ".");
-    load_directory(&file_list, ".");
+    init_file_list(&file_list, initial);
+    load_directory(&file_list, initial);
     init_file_list(&preview_list, ".");
     preview_is_dir = 0;
 

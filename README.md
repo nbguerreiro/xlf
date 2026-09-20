@@ -47,6 +47,12 @@ Build
 
     ./xlf
 
+  Pass an optional directory argument to start there instead of the current
+  directory (`~` and relative paths are accepted):
+
+    ./xlf ~/Documents
+    ./xlf /var/log
+
 Developer helpers
 - Lint (syntax-only):
 
