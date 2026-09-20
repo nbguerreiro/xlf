@@ -518,10 +518,12 @@ static void command_rename(void);
 static void command_search(void);
 static void command_parent(void);
 static void command_enter(void);
+static void toggle_hidden_files(void);
 static void command_cd(void);
 static void command_mkdir(void);
 static void command_touch(void);
 static void command_history(void);
+static void toggle_hidden_files(void);
 static void run_command(const char *name);
 
 static const InternalCommand internal_commands[] = {
@@ -532,8 +534,8 @@ static const InternalCommand internal_commands[] = {
     {"search", "/", command_search},
     {"parent", "h", command_parent},
     {"enter", "l", command_enter},
+    {"dotfiles", ".", toggle_hidden_files},
     {"cd", NULL, command_cd},
-    {"mkdir", NULL, command_mkdir},
     {"touch", NULL, command_touch},
     {"history", NULL, command_history}
 };
@@ -1056,6 +1058,15 @@ static void command_cd(void) {
     load_directory(&file_list, resolved);
     request_preview();
     free(resolved);
+}
+
+static void toggle_hidden_files(void) {
+    set_show_hidden(get_show_hidden() ? 0 : 1);
+    char path[PATH_MAX];
+    snprintf(path, sizeof(path), "%s", file_list.path ? file_list.path : ".");
+    load_directory(&file_list, path);
+    request_preview();
+    set_status(get_show_hidden() ? "Showing dot files" : "Hiding dot files");
 }
 
 static void command_mkdir(void) {

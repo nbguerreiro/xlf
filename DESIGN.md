@@ -820,6 +820,7 @@ Mode precedence is:
 Current normal-mode commands include:
 
 - `/` — start search.
+- `.` — toggle dot-file visibility.
 - `o` — open selected file.
 - `r` — rename.
 - `Delete` — permanent delete.

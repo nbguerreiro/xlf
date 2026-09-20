@@ -21,6 +21,18 @@ void init_file_list(FileList *list, const char *path) {
     list->selection_history_capacity = 0;
 }
 
+/* Dot files are visible by default to match the original listing behavior;
+   '.' toggles between showing and hiding them. */
+static int show_hidden = 1;
+
+void set_show_hidden(int show) {
+    show_hidden = show;
+}
+
+int get_show_hidden(void) {
+    return show_hidden;
+}
+
 static void remember_selection(FileList *list) {
     if (!list || !list->path || !list->entries ||
         list->selected < 0 || list->selected >= list->count) {
@@ -201,6 +213,9 @@ void load_directory(FileList *list, const char *path) {
         while ((ent = readdir(dir)) != NULL) {
             if (strcmp(ent->d_name, ".") == 0 ||
                 strcmp(ent->d_name, "..") == 0) {
+                continue;
+            }
+            if (!show_hidden && ent->d_name[0] == '.') {
                 continue;
             }
 
