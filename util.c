@@ -1,7 +1,9 @@
 #define _GNU_SOURCE
 #include "util.h"
 
+#include <grp.h>
 #include <limits.h>
+#include <pwd.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -97,8 +99,24 @@ void format_file_info(const char *path, const char *name, int is_dir,
     char date_str[64];
     strftime(date_str, sizeof(date_str), "%a %b %d %H:%M:%S %Y", tm);
 
-    snprintf(buf, buf_size, "%s %ld %ld %s %s",
-             perms, (long)st.st_uid, (long)st.st_gid, size_str, date_str);
+    char owner[64];
+    struct passwd *pw = getpwuid(st.st_uid);
+    if (pw && pw->pw_name && pw->pw_name[0] != '\0') {
+        snprintf(owner, sizeof(owner), "%s", pw->pw_name);
+    } else {
+        snprintf(owner, sizeof(owner), "%ld", (long)st.st_uid);
+    }
+
+    char group[64];
+    struct group *gr = getgrgid(st.st_gid);
+    if (gr && gr->gr_name && gr->gr_name[0] != '\0') {
+        snprintf(group, sizeof(group), "%s", gr->gr_name);
+    } else {
+        snprintf(group, sizeof(group), "%ld", (long)st.st_gid);
+    }
+
+    snprintf(buf, buf_size, "%s %s %s %s %s",
+             perms, owner, group, size_str, date_str);
 }
 
 int tool_previewer_available = 0;

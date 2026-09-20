@@ -58,4 +58,5 @@ it describes the old monolithic single-file `xlf.c` design, not the current modu
   the `{NULL, 0, 0, 0, NULL}`-style initializers too.
 - `make test` prints a benign GIO error to stderr (`test_preview_helpers` probing a path with a
   control character); it is expected and the test still passes.
-- `format_file_info` TODO #18: UID/GID shown numerically, should map to user/group names.
+- `format_file_info` maps UID/GID to user/group names via `getpwuid`/`getgrgid`, falling back to
+  the raw numbers when the lookup fails.
