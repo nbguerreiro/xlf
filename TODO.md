@@ -57,11 +57,12 @@
 
 12) [x] bug: if I go back more than one directory, it brings me back to the first folder (some sort of loop?)
 13) [x] fm should be renamed xlf everywhere
-14) [ ] a server/client mechanism so different instances of xlf can communicate with each other. for example copy on one instance, paste on another.
+14) [ ] a server/client mechanism so different instances of xlf can communicate with each other. for example copy on one instance, paste on another. maybe using sockets/pipes ?
 15) [x] control-click should also be right-click
 16) [ ] preview should use external "previewer.sh" for all items, except images
 17) [ ] cd command
 18) [ ] on the top bar of the right pane, information appears as "drwx------ 6 1000 1000 ...". it should be "drwx------ 6 fx fx ...". "fx" being the user with UID 1000.
 19) [ ] mouse wheel to scroll
 20) [ ] show/hide dot files
+21) [ ] command line parameter with path to start from
 
