@@ -36,10 +36,6 @@ ScaledImageCache scaled_image_cache = {NULL, 0, 0};
 
 extern int is_small_image(const char *path, off_t max_size);
 extern char *load_text_content(const char *path, off_t max_size);
-extern char *load_html_preview(const char *path);
-extern char *load_pdf_preview(const char *path);
-extern char *load_mp3_info(const char *path);
-extern char *load_media_preview(const char *path);
 extern void load_directory(FileList *list, const char *path);
 extern void init_file_list(FileList *list, const char *path);
 extern void clear_preview_state(void);
@@ -61,10 +57,8 @@ extern void clear_preview_state(void);
 #ifndef ENABLE_PREVIEW_MEDIA
 #define ENABLE_PREVIEW_MEDIA 1
 #endif
-extern int tool_lynx_available;
-extern int tool_pdfinfo_available;
-extern int tool_mediainfo_available;
-extern int tool_mp3info_available;
+extern int tool_previewer_available;
+extern const char *previewer_command(void);
 
 
 
@@ -321,38 +315,10 @@ PreviewResult load_preview_result(const PreviewTask *task) {
             break;
 
         case PREVIEW_RESULT_TEXT:
-            if (is_small_image(task->path, 1048576)) {
-                result.text = load_text_content(task->path, 1048576);
-                if (result.text && result.text[0] == '\0') {
-                    free(result.text);
-                    result.text = NULL;
-                }
-            }
-            break;
-
         case PREVIEW_RESULT_HTML:
-            result.text = load_html_preview(task->path);
-            if (result.text && result.text[0] == '\0') {
-                free(result.text);
-                result.text = NULL;
-            }
-            break;
-
         case PREVIEW_RESULT_PDF:
-            if (is_small_image(task->path, 5 * 1048576)) {
-                result.text = load_pdf_preview(task->path);
-                if (result.text && result.text[0] == '\0') {
-                    free(result.text);
-                    result.text = NULL;
-                }
-            }
-            break;
-
         case PREVIEW_RESULT_MEDIA:
-            result.text = load_mp3_info(task->path);
-            if (!result.text) {
-                result.text = load_media_preview(task->path);
-            }
+            result.text = load_previewer(task->path);
             if (result.text && result.text[0] == '\0') {
                 free(result.text);
                 result.text = NULL;
@@ -482,20 +448,18 @@ void request_preview() {
         if (task.path) {
             if (entry->is_dir) {
                 task.kind = PREVIEW_RESULT_DIR;
+            } else if (detect_file_type(path, entry->name) == FILE_TYPE_IMAGE) {
+                // Images are decoded in-process with GdkPixbuf; everything
+                // else is handed to the external previewer script.
+                task.kind = PREVIEW_RESULT_IMAGE;
+            } else if (tool_previewer_available) {
+                task.kind = PREVIEW_RESULT_TEXT;
             } else {
-                switch (detect_file_type(path, entry->name)) {
-                    case FILE_TYPE_IMAGE: task.kind = PREVIEW_RESULT_IMAGE; break;
-                    case FILE_TYPE_TEXT: task.kind = PREVIEW_RESULT_TEXT; break;
-                    case FILE_TYPE_HTML: task.kind = PREVIEW_RESULT_HTML; break;
-                    case FILE_TYPE_PDF: task.kind = PREVIEW_RESULT_PDF; break;
-                    case FILE_TYPE_MP3:
-                    case FILE_TYPE_MEDIA: task.kind = PREVIEW_RESULT_MEDIA; break;
-                    case FILE_TYPE_UNKNOWN: task.kind = PREVIEW_RESULT_NONE; break;
-                }
-                if (task.kind == PREVIEW_RESULT_NONE) {
-                    free(task.path);
-                    task.path = NULL;
-                }
+                task.kind = PREVIEW_RESULT_NONE;
+                free(task.path);
+                task.path = NULL;
+                set_status("Tool 'previewer.sh' not found.\n"
+                           "Install previewer.sh on PATH or set PREVIEWER.");
             }
         }
     }
@@ -934,17 +898,12 @@ static int valid_preview_path(const char *path) {
 }
 
 static int valid_preview_command(const char *cmd) {
-    static const char *const allowed[] = {
-        "lynx", "pdfinfo", "mediainfo", "mp3info"
-    };
-
+    // The only approved preview command is the external previewer script,
+    // resolved as "previewer.sh" on PATH or taken from the PREVIEWER
+    // environment variable. Calling it is always the user's own
+    // configuration, never file-controlled data.
     if (!cmd || cmd[0] == '\0') return 0;
-
-    for (size_t i = 0; i < sizeof(allowed) / sizeof(allowed[0]); ++i) {
-        if (strcmp(cmd, allowed[i]) == 0) return 1;
-    }
-
-    return 0;
+    return strcmp(cmd, previewer_command()) == 0;
 }
 
 char *load_text_preview(const char *cmd, const char *arg1, const char *arg2, const char *path) {
@@ -1026,16 +985,6 @@ char *load_text_preview(const char *cmd, const char *arg1, const char *arg2, con
     return buffer;
 }
 
-char *load_html_preview(const char *path) {
-    if (!tool_lynx_available) {
-        return g_strdup("Tool 'lynx' not found.\nInstall lynx to preview HTML files.\n\n"
-                      "On Ubuntu/Debian: sudo apt install lynx\n"
-                      "On macOS: brew install lynx\n"
-                      "On Fedora: sudo dnf install lynx");
-    }
-    return load_text_preview("lynx", "-force_html", "-dump", path);
-}
-
 char *load_text_content(const char *path, off_t max_size) {
     FILE *f = fopen(path, "r");
     if (!f) return NULL;
@@ -1067,32 +1016,14 @@ char *load_text_content(const char *path, off_t max_size) {
     return buffer;
 }
 
-char *load_pdf_preview(const char *path) {
-    if (!tool_pdfinfo_available) {
-        return g_strdup("Tool 'pdfinfo' not found.\nInstall poppler-utils to preview PDF metadata.\n\n"
-                      "On Ubuntu/Debian: sudo apt install poppler-utils\n"
-                      "On macOS: brew install poppler\n"
-                      "On Fedora: sudo dnf install poppler-utils");
-    }
-    return load_text_preview("pdfinfo", NULL, NULL, path);
-}
+char *load_previewer(const char *path) {
+    const char *cmd = previewer_command();
 
-char *load_media_preview(const char *path) {
-    if (!tool_mediainfo_available) {
-        return g_strdup("Tool 'mediainfo' not found.\nInstall mediainfo to preview audio/video metadata.\n\n"
-                      "On Ubuntu/Debian: sudo apt install mediainfo\n"
-                      "On macOS: brew install mediainfo\n"
-                      "On Fedora: sudo dnf install mediainfo");
+    if (!tool_previewer_available) {
+        return g_strdup("Tool 'previewer.sh' not found.\n"
+                        "Install previewer.sh on PATH or set the PREVIEWER "
+                        "environment variable.");
     }
-    return load_text_preview("mediainfo", NULL, NULL, path);
-}
 
-char *load_mp3_info(const char *path) {
-    if (!tool_mp3info_available) {
-        return g_strdup("Tool 'mp3info' not found.\nInstall mp3info to preview MP3 metadata.\n\n"
-                      "On Ubuntu/Debian: sudo apt install mp3info\n"
-                      "On macOS: brew install mp3info\n"
-                      "On Fedora: sudo dnf install mp3info");
-    }
-    return load_text_preview("mp3info", "-x", NULL, path);
+    return load_text_preview(cmd, NULL, NULL, path);
 }

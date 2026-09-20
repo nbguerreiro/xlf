@@ -2,7 +2,8 @@
 
 What this is
 - A small file manager using Xlib + Cairo + Pango + GdkPixbuf for previews.
-- Supports previews for text/html/pdf/media; directory preview; image preview.
+- Images are previewed in-process with GdkPixbuf; every other item is previewed
+  through an external `previewer.sh` script. Directory previews are internal.
 
 Build dependencies
 - pkg-config
@@ -17,12 +18,24 @@ Build dependencies
 - An X11 display/server
 - The libraries above must be installed at runtime (not only their development packages).
 
-Optional tools (for richer previews):
+Optional tools (used by the default previewer.sh for richer previews):
+  - previewer.sh (the external previewer; see below)
+  - `file` (content-based MIME detection)
   - lynx (HTML -> text)
   - poppler-utils (pdfinfo)
-  - mediainfo
-  - mp3info
+  - mediainfo / mp3info
+  - unzip, tar (archive listings)
   - dmenu (for the external command menu)
+
+Previews
+- xlf looks up `previewer.sh` on `PATH` at startup. When a non-image item is
+  selected, xlf runs `previewer.sh <path>` and renders its stdout in the right
+  pane. Point at a script of your own with the `PREVIEWER` environment
+  variable, e.g. `PREVIEWER=~/.local/bin/my-previewer.sh xlf`.
+- A reference `previewer.sh` ships in `previews/`; copy it into your `PATH`
+  (e.g. `~/.local/bin`) or point `PREVIEWER` at it.
+- If `previewer.sh` is missing, a status-bar message is shown and no text
+  preview is produced.
 
 Build
 - Recommended: have pkg-config set up for the libraries above.
@@ -48,8 +61,10 @@ Developer helpers
     make clean
 
 Notes and limitations
-- Some previews rely on external programs; absence of those programs results in a status-bar notification and no preview for that type.
-- Preview loading is asynchronous; image decoding and other preview work run in the dedicated preview worker.
+- Previews rely on the external previewer script; absence of `previewer.sh`
+  results in a status-bar notification and no text preview.
+- Preview loading is asynchronous; image decoding and other preview work run
+  in the dedicated preview worker.
 - Tested on Linux with X11. Not tested on Wayland.
 
 License

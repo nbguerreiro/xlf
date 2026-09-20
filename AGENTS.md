@@ -18,19 +18,23 @@ it describes the old monolithic single-file `xlf.c` design, not the current modu
 
 ## Architecture
 
-- Modules: `fm.c` (control + X11 event loop + input/commands), `filelist.c`, `preview.c`
+- Modules: `xlf.c` (control + X11 event loop + input/commands), `filelist.c`, `preview.c`
   (type detection, async loading, drawing), `ui.c` (Cairo/Pango rendering), `util.c`,
   `history.c`, `commands.h`.
 - **Preview worker thread**: all slow preview work runs on a dedicated thread; the UI thread
   never blocks on disk/decoding. Results carry a `generation` counter as a stale-result guard,
   delivered via a wake pipe integrated into the X11 `select()` loop. Add new preview kinds by
   following the existing `PreviewTask`/`PreviewResult` pipeline in `preview.c`.
+- **External previewer**: images are decoded in-process with GdkPixbuf; every other non-directory
+  item is delegated to an external `previewer.sh` (or a script of the user's choice via the
+  `PREVIEWER` env var), invoked as `previewer.sh <path>` with **no shell**. `valid_preview_command()`
+  allows only that configured command. The shipped `previews/previewer.sh` dispatches on MIME type
+  and wraps lynx/pdfinfo/mediainfo/mp3info/unzip/tar; it bounds its own output.
 - Ownership: `FileList` owns its entry names/path (`free_file_list()`); preview state is owned
   per-type with `free_preview_*()` + central `clear_preview_state()`; the worker creates, the main
   thread takes ownership of `PreviewResult` via `apply_preview_result()`.
-- External commands (xdg-open, lynx, pdfinfo, mediainfo, mp3info, trash) are fork/exec'ed with
-  **no shell**; `valid_preview_command()` is an allow-list. Optional helpers missing → graceful
-  status message, detected at startup.
+- Other external commands (xdg-open, trash) are fork/exec'ed with **no shell**. Missing optional
+  helpers inside previewer.sh → graceful status message, detected at startup.
 - Keys: `j/k` move, `l` enter/open, `h` parent, `/` search, `r` rename, `o` open with xdg-open,
   `Del` permanent delete, `Backspace` trash (external `trash`), `Space` mark multi-select,
   `:` dmenu command menu, `q`/Esc quit.
@@ -42,8 +46,9 @@ it describes the old monolithic single-file `xlf.c` design, not the current modu
 ## Gotchas
 
 - **`.gitignore` is a whitelist**: it ignores `*` then re-includes `*.c`, `*.h`, `Makefile`,
-  `TODO.md`, `.github/**`. Any new non-source file (scripts, docs, fixtures) stays untracked
-  unless you add a `!` rule. `tests/` binaries and `xlf` are intentionally ignored.
+  `TODO.md`, `.github/**`, and `previews/previewer.sh`. Any new non-source file (scripts, docs,
+  fixtures) stays untracked unless you add a `!` rule. `tests/` binaries and `xlf` are
+  intentionally ignored.
 - The app is named `xlf` everywhere now (binary, `xlf.c`, history dir under
   `~/.local/state/xlf`). Keep it that way — no more `fm` strings (TODO.md #13 is done).
 - `FileList` grew a `selection_history` field (filelist.h); several positional aggregate

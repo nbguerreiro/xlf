@@ -48,14 +48,14 @@ The application can be viewed as four cooperating layers:
                                     | preview state |
                                     +-------+-------+
                                             |
-                             +--------------+--------------+
-                             |              |              |
-                           GdkPixbuf     local files    external
-                           / images      / text files    tools
-                                                         lynx
-                                                       pdfinfo
-                                                      mediainfo
-                                                       mp3info
++--------------+--------------+
+                              |              |              |
+                            GdkPixbuf     directories     external
+                            / images       / file lists    tools
+                                                          previewer.sh
+                                                          (wraps lynx,
+                                                        pdfinfo, mediainfo,
+                                                        mp3info, ...)
 ```
 
 ### Threading model
@@ -236,20 +236,22 @@ Directories use `-` for the size field.
 
 ### `tool_is_available(const char *tool_name)`
 
-Searches the current `PATH` for an executable with the requested name.
+Searches the current `PATH` for an executable with the requested name. A name
+containing a slash is checked directly as a pathname (used by the `PREVIEWER`
+override).
 
 No shell is invoked.
 
+### `previewer_command(void)`
+
+Returns the previewer command: the value of the `PREVIEWER` environment
+variable when set, otherwise the default `"previewer.sh"`.
+
 ### `check_tool_availability(void)`
 
-Performs the startup availability checks for:
-
-- `lynx`
-- `pdfinfo`
-- `mediainfo`
-- `mp3info`
-
-The results are cached in global availability flags so normal preview operations do not repeatedly scan `PATH`.
+Performs the startup availability check for the previewer script, caching the
+result in `tool_previewer_available` so normal preview operations do not
+repeatedly scan `PATH`.
 
 ---
 
@@ -378,7 +380,7 @@ It then resets the result.
 
 Runs the actual preview loading operation selected by the task.
 
-Directories are scanned into a temporary `FileList`. Images are decoded with GdkPixbuf. Text files are read into memory. HTML/PDF/media previews invoke their corresponding helper loaders.
+Directories are scanned into a temporary `FileList`. Images are decoded with GdkPixbuf. Every other kind of item is delegated to the external previewer script (`previewer.sh`, or the `PREVIEWER` override).
 
 The loader operates independently of the visible UI state.
 
@@ -474,45 +476,49 @@ Checks the file size before expensive preview processing. The function is used a
 
 The application deliberately avoids a shell for external commands.
 
+All non-image item previews are produced by a single external script,
+`previewer.sh` (see the reference implementation in `previews/`). xlf executes
+it as `previewer.sh <path>` and renders its stdout as text. The script decides
+what to show per file, commonly by dispatching on content-based MIME type and
+wrapping helpers such as `lynx`, `pdfinfo`, `mediainfo`, `mp3info`, `unzip`,
+and `tar`. Users can supply their own script via the `PREVIEWER` environment
+variable.
+
 ### `valid_preview_path(const char *path)`
 
 Rejects null/empty paths and paths containing control characters.
 
 ### `valid_preview_command(const char *cmd)`
 
-Allows only the known preview helper programs.
-
-This gives the subprocess layer a strict command allow-list.
+Allows only the configured previewer command (`previewer.sh` on `PATH`, or the
+`PREVIEWER` override). The command name comes from user configuration, never
+from file-controlled data, which keeps the subprocess layer a strict
+allow-list.
 
 ### `load_text_preview(...)`
 
-Creates a pipe, forks, redirects the child stdout into the pipe, and executes an approved helper with `execlp()`.
+Creates a pipe, forks, redirects the child stdout into the pipe, and executes
+the approved previewer with `execlp()`.
 
-The parent reads the command's output into a dynamically growing buffer and waits for the child.
+The parent reads the command's output into a dynamically growing buffer and
+waits for the child. The default `previewer.sh` bounds its own output so large
+files cannot stall the worker indefinitely.
 
-This generic helper is used by HTML, PDF, media, and MP3 preview loaders.
+### `load_previewer(const char *path)`
 
-### `load_html_preview(const char *path)`
-
-Uses `lynx` to turn HTML into readable terminal-style text. If lynx is unavailable, it returns an explanatory message for the status/preview UI.
+Validates the configured previewer command and runs `load_text_preview`
+against the selected path, producing the text installed as the preview. If the
+previewer script is unavailable it returns an explanatory message shown in the
+status/preview UI.
 
 ### `load_text_content(const char *path, off_t max_size)`
 
 Reads a bounded ordinary text file into an allocated NUL-terminated buffer.
+Kept as a utility; the interactive path delegates text handling to the
+previewer script.
 
-### `load_pdf_preview(const char *path)`
-
-Uses `pdfinfo` to obtain PDF metadata, with a graceful missing-tool message.
-
-### `load_media_preview(const char *path)`
-
-Uses `mediainfo` for general audio/video metadata.
-
-### `load_mp3_info(const char *path)`
-
-Uses `mp3info` for MP3 metadata.
-
-The application checks helper availability at startup so missing optional programs produce a useful message rather than an unexplained blank preview.
+The application checks previewer availability at startup so a missing script
+produces a useful message rather than an unexplained blank preview.
 
 ---
 
@@ -933,7 +939,12 @@ Preview categories can be enabled or disabled at compile time through:
 - `ENABLE_PREVIEW_MP3`
 - `ENABLE_PREVIEW_MEDIA`
 
-Each defaults to enabled when not supplied by the build configuration.
+These defaults to enabled when not supplied by the build configuration.
+
+With the external previewer in place, only `ENABLE_PREVIEW_IMAGE` changes
+built-in routing (when disabled, image files are also handed to the previewer
+script). The category flags still gate extension/MIME detection in
+`detect_file_type`, which continues to feed type detection tests.
 
 This keeps optional preview functionality separable without requiring runtime configuration for every build.
 
@@ -1097,8 +1108,9 @@ The current five-module split keeps file scanning, preview processing, rendering
 | `get_absolute_path` | Resolve a path with `realpath()`, falling back to the supplied path |
 | `get_display_path` | Produce a user-friendly path with home-directory abbreviation |
 | `format_file_info` | Format permissions, ownership, size, and timestamp |
-| `tool_is_available` | Check whether an executable exists on `PATH` |
-| `check_tool_availability` | Cache availability of optional preview helpers |
+| `tool_is_available` | Check whether an executable exists on `PATH` (paths accepted) |
+| `previewer_command` | Return the configured previewer (PREVIEWER or `previewer.sh`) |
+| `check_tool_availability` | Cache previewer availability at startup |
 
 ### preview.c
 
@@ -1130,13 +1142,10 @@ The current five-module split keeps file scanning, preview processing, rendering
 | `is_media_file` | Test audio/video extensions |
 | `is_small_image` | Enforce preview file-size limits |
 | `valid_preview_path` | Validate a path before external preview use |
-| `valid_preview_command` | Validate an allowed external preview command |
-| `load_text_preview` | Execute an approved helper and capture text output |
-| `load_html_preview` | Load HTML as text through lynx |
+| `valid_preview_command` | Validate the configured previewer command |
+| `load_text_preview` | Execute the approved previewer and capture text output |
 | `load_text_content` | Read a bounded ordinary text file |
-| `load_pdf_preview` | Load PDF metadata through pdfinfo |
-| `load_media_preview` | Load media metadata through mediainfo |
-| `load_mp3_info` | Load MP3 metadata through mp3info |
+| `load_previewer` | Run the previewer script for one item |
 
 ### ui.c
 

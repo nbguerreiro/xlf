@@ -101,12 +101,21 @@ void format_file_info(const char *path, const char *name, int is_dir,
              perms, (long)st.st_uid, (long)st.st_gid, size_str, date_str);
 }
 
-int tool_lynx_available = 0;
-int tool_pdfinfo_available = 0;
-int tool_mediainfo_available = 0;
-int tool_mp3info_available = 0;
+int tool_previewer_available = 0;
+
+const char *previewer_command(void) {
+    const char *env = getenv("PREVIEWER");
+    if (env && env[0] != '\0') return env;
+    return "previewer.sh";
+}
 
 int tool_is_available(const char *tool_name) {
+    if (!tool_name || tool_name[0] == '\0') return 0;
+
+    // An explicit path (e.g. the PREVIEWER override) is checked directly
+    // rather than being appended to each PATH entry.
+    if (strchr(tool_name, '/') != NULL) return access(tool_name, X_OK) == 0;
+
     const char *path_env = getenv("PATH");
     if (!path_env) return 0;
     char *path_copy = strdup(path_env);
@@ -127,8 +136,5 @@ int tool_is_available(const char *tool_name) {
 }
 
 void check_tool_availability(void) {
-    tool_lynx_available = tool_is_available("lynx");
-    tool_pdfinfo_available = tool_is_available("pdfinfo");
-    tool_mediainfo_available = tool_is_available("mediainfo");
-    tool_mp3info_available = tool_is_available("mp3info");
+    tool_previewer_available = tool_is_available(previewer_command());
 }

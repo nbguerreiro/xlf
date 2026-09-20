@@ -86,5 +86,6 @@ int is_media_file(const char *filename);
 int is_small_image(const char *path, off_t max_size);
 char *load_text_preview(const char *cmd, const char *arg1, const char *arg2, const char *path);
 char *load_text_content(const char *path, off_t max_size);
+char *load_previewer(const char *path);
 
 #endif
