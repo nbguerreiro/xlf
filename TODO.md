@@ -57,7 +57,6 @@
 
 12) [x] bug: if I go back more than one directory, it brings me back to the first folder (some sort of loop?)
 13) [x] fm should be renamed xlf everywhere
-14) [ ] a server/client mechanism so different instances of xlf can communicate with each other. for example copy on one instance, paste on another. maybe using sockets/pipes ?
 15) [x] control-click should also be right-click
 16) [x] preview should use external "previewer.sh" for all items, except images
 17) [x] commands: cd, touch, mkdir
@@ -65,4 +64,72 @@
 19) [x] mouse wheel to scroll
 20) [x] show/hide dot files
 21) [x] command line parameter with path to start from
+
+
+14) [ ] xlf instance IPC / client-server architecture
+
+14.1 [ ] Add Unix-domain socket IPC foundation
+    * Add `ipc.c` / `ipc.h`.
+    * Create a per-user Unix-domain socket under `$XDG_RUNTIME_DIR` (with an appropriate fallback).
+    * Implement server creation, client connection, cleanup, and basic connection handling.
+    * No file-manager functionality yet.
+    * Add basic tests for socket creation/connection.
+
+14.2 [ ] Add framed IPC message protocol
+    * Define a small binary, length-prefixed IPC protocol.
+    * Support commands/messages without assuming anything about filenames.
+    * Correctly handle paths containing spaces, newlines, Unicode, etc.
+    * Reject malformed/oversized messages.
+    * Add protocol unit tests.
+
+14.3 [ ] Integrate IPC with xlf's event loop
+    * Make IPC sockets non-blocking.
+    * Integrate socket activity with the existing X11 event loop.
+    * Ensure an IPC connection can never freeze the UI.
+    * Handle client disconnects cleanly.
+
+14.4 [ ] Implement the shared xlf clipboard
+    * Add clipboard state containing:
+    * operation (`COPY` or `CUT`)
+    * list of source paths
+    * Implement `COPY`, `CUT`, `GET_CLIPBOARD`, and `CLEAR_CLIPBOARD`.
+    * Keep the clipboard independent of any particular xlf window.
+
+14.5 [ ] Connect xlf's existing copy operation to the IPC clipboard
+    *  Make `copy` place the selected/marked paths into the shared clipboard.
+    * If nothing is marked, copy the current selection.
+    * Make the status bar report the operation.
+
+14.6 [ ] Implement paste between xlf instances
+    * Add `paste`.
+    * Retrieve the shared clipboard from the IPC server.
+    * Paste into the current directory.
+    * Initially implement `COPY`/paste only.
+    * Handle basic errors and destination conflicts cleanly.
+
+14.7 [ ] Implement cut/move between instances
+    * Make `CUT` + `paste` perform a move rather than a copy.
+    * Clear/update the clipboard appropriately after a successful move.
+    * Handle files that have disappeared since they were cut.
+
+14.8 [ ] Handle server/client lifecycle
+    * First xlf instance can become the IPC server.
+    * Subsequent instances connect as clients.
+    * If the server exits, another instance can take over.
+    * Handle stale socket files.
+    * Ensure simultaneous startup doesn't create two servers.
+
+14.9 [ ] Add IPC integration tests
+    * Test two and three xlf instances communicating.
+    * Copy in A → paste in B.
+    * Cut in A → paste in B.
+    * Close A → B continues working.
+    * Close the server → another instance takes over.
+    * Test multiple marked files/directories.
+
+14.10 [ ] Extend IPC for future inter-instance commands
+    * Establish a clean mechanism for commands beyond copy/paste, without implementing them yet.
+    * Document the protocol and extension mechanism.
+    * Possible future commands: navigate to path, select path, open path, etc.
+
 
