@@ -5,6 +5,7 @@
 !*.h
 !Makefile
 !TODO.md
+!AGENTS.md
 
 !.github/
 !.github/**
