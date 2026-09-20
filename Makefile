@@ -1,69 +1,44 @@
-CC ?= gcc
-PKG_CFLAGS := $(shell pkg-config --cflags cairo pangocairo pango gdk-pixbuf-2.0 gio-2.0 x11 fontconfig)
-PKG_LIBS := $(shell pkg-config --libs cairo pangocairo pango gdk-pixbuf-2.0 gio-2.0 x11 fontconfig)
-CFLAGS ?= -std=c11 -O2 -Wall -Wextra
-CFLAGS += $(PKG_CFLAGS)
-LDFLAGS ?=
-LDFLAGS += $(PKG_LIBS) -pthread
-SRC := xlf.c filelist.c util.c preview.c ui.c history.c
-HEADERS := commands.h history.h
-BIN := xlf
+CC = gcc
 
-.PHONY: all run clean sanitize sanitize-test lint test deps check-deps
+# https://wiki.debian.org/Hardening
+# $ hardening-check out
+DPKG_EXPORT_BUILDFLAGS = 1
 
-all: check-deps $(BIN)
+PKGS=cairo pangocairo pango gdk-pixbuf-2.0 gio-2.0 x11 fontconfig
+C := $(shell pkg-config --cflags $(PKGS)) 
+L := $(shell pkg-config --libs $(PKGS))
 
-check-deps:
-	@pkg-config --exists cairo pangocairo pango gdk-pixbuf-2.0 gio-2.0 x11 || (echo "Missing required pkg-config dependencies: cairo pangocairo pango gdk-pixbuf-2.0 gio-2.0 x11"; exit 1)
+CFLAGS := $(shell dpkg-buildflags --get CFLAGS) 
+LDFLAGS := $(shell dpkg-buildflags --get LDFLAGS)  -pthread
 
-$(BIN): $(SRC) $(HEADERS)
-	$(CC) $(CFLAGS) -o $@ $(SRC) $(LDFLAGS)
+CFLAGS += -D_FORTIFY_SOURCE=3 -fstack-protector-all
+CFLAGS += $(C) $(L)
+CFLAGS += -DDEBUG=0
 
-run: $(BIN)
-	./$(BIN)
+BIN := out
 
-clean:
-	rm -f $(BIN) fm tests/test_filelist tests/test_type_detection tests/test_preview_helpers tests/test_filelist_sanitize tests/test_type_detection_sanitize tests/test_preview_helpers_sanitize
+debug: CFLAGS := -ggdb3 \
+	-pedantic -W -Wall -Wstrict-prototypes -Wunreachable-code  \
+	-Wwrite-strings -Wpointer-arith -Wbad-function-cast \
+	-Wcast-align -Wcast-qual \
+	-Wfree-nonheap-object
+debug: CFLAGS += $(C) $(L)
+debug: CFLAGS += -DDEBUG=1
+
+fanalyzer: CFLAGS += -g -O1 -fanalyzer
 
 sanitize: CFLAGS += -g -O1 -fsanitize=address,undefined -fno-omit-frame-pointer
-sanitize: clean $(BIN)
-	@echo "Built $(BIN) with sanitizers (run ./$(BIN) to execute)"
 
-lint:
-	$(CC) -fsyntax-only -Wall -Wextra $(CFLAGS) $(SRC)
+SRC := xlf.c filelist.c util.c preview.c ui.c history.c
 
-test: $(BIN) tests/test_filelist tests/test_type_detection tests/test_preview_helpers
-	./tests/test_filelist
-	./tests/test_type_detection
-	./tests/test_preview_helpers
+all: main
+debug: main
+sanitize: main
+fanalyzer: main
 
-tests/test_filelist: tests/test_filelist.c filelist.c filelist.h util.c util.h
-	$(CC) $(CFLAGS) -I. -o $@ tests/test_filelist.c filelist.c util.c
+main: $(SRC)
+	$(CC) -o $(BIN) $(SRC) $(CFLAGS) $(LDFLAGS) 2>&1 | tee -a out.log;
 
-tests/test_type_detection: tests/test_type_detection.c preview.c preview.h filelist.h
-	$(CC) $(CFLAGS) -ffunction-sections -fdata-sections -I. -o $@ tests/test_type_detection.c preview.c $(LDFLAGS) -Wl,--gc-sections
+clean:
+	rm -rfv $(BIN) reports *.o *.s *.bc *.db *.log
 
-tests/test_preview_helpers: tests/test_preview_helpers.c preview.c preview.h filelist.c filelist.h util.c util.h
-	$(CC) $(CFLAGS) -ffunction-sections -fdata-sections -I. -o $@ tests/test_preview_helpers.c preview.c filelist.c util.c $(LDFLAGS) -Wl,--gc-sections
-
-sanitize-test: CFLAGS += -g -O1 -fsanitize=address,undefined -fno-omit-frame-pointer
-sanitize-test: LDFLAGS += -fsanitize=address,undefined
-sanitize-test: clean tests/test_filelist_sanitize tests/test_type_detection_sanitize tests/test_preview_helpers_sanitize
-	./tests/test_filelist_sanitize
-	./tests/test_type_detection_sanitize
-	./tests/test_preview_helpers_sanitize
-
-tests/test_filelist_sanitize: tests/test_filelist.c filelist.c filelist.h util.c util.h
-	$(CC) $(CFLAGS) -I. -o $@ tests/test_filelist.c filelist.c util.c $(LDFLAGS)
-
-tests/test_type_detection_sanitize: tests/test_type_detection.c preview.c preview.h filelist.h
-	$(CC) $(CFLAGS) -ffunction-sections -fdata-sections -I. -o $@ tests/test_type_detection.c preview.c $(LDFLAGS) -Wl,--gc-sections
-
-tests/test_preview_helpers_sanitize: tests/test_preview_helpers.c preview.c preview.h filelist.c filelist.h util.c util.h
-	$(CC) $(CFLAGS) -ffunction-sections -fdata-sections -I. -o $@ tests/test_preview_helpers_sanitize.c preview.c filelist.c util.c $(LDFLAGS) -Wl,--gc-sections
-
-deps:
-	@echo "Required system packages:"
-	@echo "  - pkg-config"
-	@echo "  - development headers: cairo, pangocairo, pango, gdk-pixbuf-2.0, libX11"
-	@echo "  - optional preview tools: lynx, poppler-utils (pdfinfo), mediainfo, mp3info"
