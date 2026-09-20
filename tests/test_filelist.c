@@ -89,20 +89,50 @@ int main(void) {
     clear_file_marks(&list);
     assert(count_marked_files(&list) == 0);
 
-    /* Selection follows each directory when navigating away and back. */
+    /* Selection history: entering a directory remembers where you were;
+       the first visit to a directory starts on the first item. */
     list.selected = 2;
     load_directory(&list, subdir);
     assert(list.count == 2);
     assert(list.selected == 0);
 
     list.selected = 1;
+    /* Going up always selects the child directory we just exited,
+       overriding any remembered selection in the parent. */
     load_directory(&list, dir);
-    assert(list.selected == 2);
-    assert(strcmp(list.entries[list.selected].name, "a.txt") == 0);
+    assert(list.selected == 0);
+    assert(strcmp(list.entries[list.selected].name, "subdir") == 0);
 
+    /* Going down again restores the remembered selection. */
     load_directory(&list, subdir);
     assert(list.selected == 1);
     assert(strcmp(list.entries[list.selected].name, "b.txt") == 0);
+
+    /* First-time up: parent was never visited (no remembered selection),
+       so it must still land on the child directory that contains us. */
+    char fresh_parent[4096], fresh_child[4096], fresh_file[4096];
+    snprintf(fresh_parent, sizeof(fresh_parent), "%s/freshup", dir);
+    assert(mkdir(fresh_parent, 0700) == 0);
+    snprintf(fresh_child, sizeof(fresh_child), "%s/inner", fresh_parent);
+    assert(mkdir(fresh_child, 0700) == 0);
+    snprintf(fresh_file, sizeof(fresh_file), "%s/x.txt", fresh_child);
+    make_file(fresh_file);
+
+    FileList fresh;
+    init_file_list(&fresh, fresh_child);
+    load_directory(&fresh, fresh_child);
+    assert(fresh.count == 1);
+    assert(fresh.selected == 0);
+
+    load_directory(&fresh, fresh_parent);
+    assert(fresh.count == 1);
+    assert(fresh.entries[fresh.selected].is_dir);
+    assert(strcmp(fresh.entries[fresh.selected].name, "inner") == 0);
+    free_file_list(&fresh);
+
+    unlink(fresh_file);
+    rmdir(fresh_child);
+    rmdir(fresh_parent);
 
     free_file_list(&list);
     assert(list.entries == NULL);

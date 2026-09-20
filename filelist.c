@@ -241,5 +241,6 @@ void load_directory(FileList *list, const char *path) {
     }
 
     restore_selection(list);
+    select_previous_directory(list, old_path);
     free(old_path);
 }

@@ -15,7 +15,9 @@ CFLAGS += -D_FORTIFY_SOURCE=3 -fstack-protector-all
 CFLAGS += $(C) $(L)
 CFLAGS += -DDEBUG=0
 
-BIN := out
+BIN := xlf
+
+.PHONY: all run clean lint test debug sanitize fanalyzer main
 
 debug: CFLAGS := -ggdb3 \
 	-pedantic -W -Wall -Wstrict-prototypes -Wunreachable-code  \
@@ -39,6 +41,26 @@ fanalyzer: main
 main: $(SRC)
 	$(CC) -o $(BIN) $(SRC) $(CFLAGS) $(LDFLAGS) 2>&1 | tee -a out.log;
 
+run: main
+	./$(BIN)
+
+lint:
+	$(CC) -fsyntax-only -Wall -Wextra $(CFLAGS) $(SRC)
+
+test: tests/test_filelist tests/test_type_detection tests/test_preview_helpers
+	./tests/test_filelist
+	./tests/test_type_detection
+	./tests/test_preview_helpers
+
+tests/test_filelist: tests/test_filelist.c filelist.c filelist.h util.c util.h
+	$(CC) $(CFLAGS) -I. -o $@ tests/test_filelist.c filelist.c util.c $(LDFLAGS)
+
+tests/test_type_detection: tests/test_type_detection.c preview.c preview.h filelist.h
+	$(CC) $(CFLAGS) -ffunction-sections -fdata-sections -I. -o $@ tests/test_type_detection.c preview.c $(LDFLAGS) -Wl,--gc-sections
+
+tests/test_preview_helpers: tests/test_preview_helpers.c preview.c preview.h filelist.c filelist.h util.c util.h
+	$(CC) $(CFLAGS) -ffunction-sections -fdata-sections -I. -o $@ tests/test_preview_helpers.c preview.c filelist.c util.c $(LDFLAGS) -Wl,--gc-sections
+
 clean:
-	rm -rfv $(BIN) reports *.o *.s *.bc *.db *.log
+	rm -rfv $(BIN) tests/test_filelist tests/test_type_detection tests/test_preview_helpers reports *.o *.s *.bc *.db *.log
 
