@@ -510,6 +510,9 @@ static void command_rename(void);
 static void command_search(void);
 static void command_parent(void);
 static void command_enter(void);
+static void command_cd(void);
+static void command_mkdir(void);
+static void command_touch(void);
 static void command_history(void);
 static void run_command(const char *name);
 
@@ -521,6 +524,9 @@ static const InternalCommand internal_commands[] = {
     {"search", "/", command_search},
     {"parent", "h", command_parent},
     {"enter", "l", command_enter},
+    {"cd", NULL, command_cd},
+    {"mkdir", NULL, command_mkdir},
+    {"touch", NULL, command_touch},
     {"history", NULL, command_history}
 };
 
@@ -925,6 +931,170 @@ static void command_enter(void) {
     } else {
         open_selected_file();
     }
+}
+
+// Resolve a user-entered path against the current directory, expanding a
+// leading `~`. Returns a copy the caller must free, or NULL if too long.
+static char *resolve_target_path(const char *target) {
+    char resolved[PATH_MAX];
+    int n;
+    if (target[0] == '~' && (target[1] == '\0' || target[1] == '/')) {
+        const char *home = getenv("HOME");
+        if (home && home[0] != '\0') {
+            n = snprintf(resolved, sizeof(resolved), "%s%s", home, target + 1);
+        } else {
+            n = snprintf(resolved, sizeof(resolved), "%s", target + 1);
+        }
+    } else if (target[0] == '/') {
+        n = snprintf(resolved, sizeof(resolved), "%s", target);
+    } else {
+        n = snprintf(resolved, sizeof(resolved), "%s/%s",
+                     file_list.path ? file_list.path : ".", target);
+    }
+    if (n < 0 || (size_t)n >= sizeof(resolved)) return NULL;
+    return strdup(resolved);
+}
+
+// Build the dmenu option list for `cd`: one line per subdirectory of the
+// current directory. Returns a malloc'd string, or NULL on allocation failure.
+static char *subdir_menu_input(void) {
+    size_t cap = 1024;
+    size_t len = 0;
+    char *buf = malloc(cap);
+    if (!buf) return NULL;
+    buf[0] = '\0';
+
+    // ".." gives an intuitive way to reach the parent from the menu.
+    const char *up = "..";
+    size_t up_len = strlen(up);
+    if (up_len + 1 > cap) {
+        char *nb = realloc(buf, up_len + 1);
+        if (!nb) { free(buf); return NULL; }
+        buf = nb;
+    }
+    memcpy(buf + len, up, up_len);
+    len += up_len;
+    buf[len++] = '\n';
+
+    for (int i = 0; i < file_list.count; ++i) {
+        const FileEntry *e = &file_list.entries[i];
+        if (!e->is_dir) continue;
+
+        size_t nlen = strlen(e->name);
+        if (len + nlen + 1 > cap) {
+            size_t ncap = cap;
+            while (ncap < len + nlen + 1) ncap *= 2;
+            char *nb = realloc(buf, ncap);
+            if (!nb) { free(buf); return NULL; }
+            buf = nb;
+            cap = ncap;
+        }
+        memcpy(buf + len, e->name, nlen);
+        len += nlen;
+        buf[len++] = '\n';
+    }
+
+    buf[len - 1] = '\0';
+    return buf;
+}
+
+static void command_cd(void) {
+    char *options = subdir_menu_input();
+    if (options && options[0] == '\0') {
+        // No subdirectories: fall back to an editable prompt seeded with the
+        // current path so arbitrary paths can still be typed.
+        free(options);
+        options = strdup(file_list.path ? file_list.path : "");
+    }
+    if (!options) {
+        set_status("cd: out of memory");
+        return;
+    }
+
+    char *target = run_dmenu(options);
+    free(options);
+    if (!target || target[0] == '\0') {
+        free(target);
+        return;
+    }
+
+    char *resolved = resolve_target_path(target);
+    free(target);
+    if (!resolved) {
+        set_status("cd: path is too long");
+        return;
+    }
+
+    struct stat st;
+    if (stat(resolved, &st) != 0) {
+        set_status("cd: no such directory");
+        free(resolved);
+        return;
+    }
+    if (!S_ISDIR(st.st_mode)) {
+        set_status("cd: not a directory");
+        free(resolved);
+        return;
+    }
+
+    // load_directory() frees list->path, so pass the resolved copy.
+    load_directory(&file_list, resolved);
+    request_preview();
+    free(resolved);
+}
+
+static void command_mkdir(void) {
+    char *target = run_dmenu("");
+    if (!target || target[0] == '\0') {
+        free(target);
+        return;
+    }
+
+    char *resolved = resolve_target_path(target);
+    free(target);
+    if (!resolved) {
+        set_status("mkdir: path is too long");
+        return;
+    }
+
+    if (mkdir(resolved, 0777) != 0) {
+        char msg[256];
+        snprintf(msg, sizeof(msg), "mkdir: %s", strerror(errno));
+        set_status(msg);
+        free(resolved);
+        return;
+    }
+
+    refresh_after_file_change(file_list.selected);
+    free(resolved);
+}
+
+static void command_touch(void) {
+    char *target = run_dmenu("");
+    if (!target || target[0] == '\0') {
+        free(target);
+        return;
+    }
+
+    char *resolved = resolve_target_path(target);
+    free(target);
+    if (!resolved) {
+        set_status("touch: path is too long");
+        return;
+    }
+
+    int fd = open(resolved, O_WRONLY | O_CREAT, 0666);
+    if (fd < 0) {
+        char msg[256];
+        snprintf(msg, sizeof(msg), "touch: %s", strerror(errno));
+        set_status(msg);
+        free(resolved);
+        return;
+    }
+    close(fd);
+
+    refresh_after_file_change(file_list.selected);
+    free(resolved);
 }
 
 static void open_selected_file(void) {

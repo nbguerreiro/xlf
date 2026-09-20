@@ -829,6 +829,14 @@ Current normal-mode commands include:
 - `l` — enter a directory or open a file.
 - `q` / Escape — quit.
 
+The command menu (`:`) lists the internal commands above plus every configured
+external command. It needs `dmenu`; the input is filtered on the selected
+command name. Selecting a command runs it. `cd` offers a dmenu list of the
+current directory's subdirectories (plus `..`); picking one navigates to it,
+and typing any other `~`/relative/absolute path still works. `mkdir` and
+`touch` prompt for a new path (resolved the same way) and then create a
+directory or an empty file, reloading the listing afterwards.
+
 During search, Up/Down move between matching entries.
 
 ---
@@ -1089,6 +1097,15 @@ The current five-module split keeps file scanning, preview processing, rendering
 | `open_selected_file` | Open the current non-directory selection |
 | `search_select` | Select a matching entry after a search query change |
 | `handle_search_key` | Handle keyboard input while searching |
+| `command_parent` | Navigate to the parent directory |
+| `command_enter` | Open a directory or the selected file |
+| `resolve_target_path` | Expand `~` and make a user-entered path absolute |
+| `subdir_menu_input` | Build the dmenu option list of subdirectories for `cd` |
+| `command_cd` | Navigate to an arbitrary path via the command menu |
+| `command_mkdir` | Create a directory via the command menu |
+| `command_touch` | Create an empty file via the command menu |
+| `command_history` | Cycle through and run previous commands from history |
+| `run_command` | Dispatch a command name to its internal handler or run it externally |
 | `handle_key` | Main keyboard command dispatcher |
 | `main` | Initialize the application and run the X11 event loop |
 

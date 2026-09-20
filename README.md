@@ -76,3 +76,8 @@ Configurable external commands
 - The selected file's path is passed to the command as argv[1].
 - The dmenu command is taken from the `DMENU` environment variable; if unset, `dmenu` is used.
 - xlf adds `-w <window-id>` so dmenu is associated with the xlf window.
+- The `:` menu also lists internal commands. `cd` navigates to an arbitrary
+  path (`~` and relative paths are resolved, and it must be a directory).
+- `mkdir` and `touch` run through the same menu: they prompt for a path,
+  create a directory or empty file (relative to the current directory), and
+  reload the listing.

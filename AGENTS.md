@@ -37,7 +37,8 @@ it describes the old monolithic single-file `xlf.c` design, not the current modu
   helpers inside previewer.sh → graceful status message, detected at startup.
 - Keys: `j/k` move, `l` enter/open, `h` parent, `/` search, `r` rename, `o` open with xdg-open,
   `Del` permanent delete, `Backspace` trash (external `trash`), `Space` mark multi-select,
-  `:` dmenu command menu, `q`/Esc quit.
+  `:` command menu (internal commands + external commands; `cd` navigates to an arbitrary
+  directory, `mkdir`/`touch` create entries prompt-based), `q`/Esc quit.
 - `:` menu and right-click / Ctrl-click context menu need `dmenu` (override binary via `DMENU` env var).
 - Persistent command history: `$XDG_STATE_HOME/xlf/history` or `~/.local/state/xlf/history`
   (a pre-existing `fm/history` is migrated on first use).
