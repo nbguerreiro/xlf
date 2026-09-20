@@ -162,7 +162,11 @@ static void delete_selected_file(void) {
     int old_selected = file_list.selected;
     int changed = 0;
 
-    for (int i = 0; i < file_list.count; ++i) {
+    // With no marked entries, act only on the current selection.
+    int first = marked_count > 0 ? 0 : file_list.selected;
+    int last = marked_count > 0 ? file_list.count - 1 : file_list.selected;
+
+    for (int i = first; i <= last; ++i) {
         if (marked_count > 0 && !file_list.entries[i].marked) continue;
         if (strcmp(file_list.entries[i].name, "..") == 0) continue;
 
@@ -186,7 +190,11 @@ static void trash_selected_file(void) {
     int old_selected = file_list.selected;
     int changed = 0;
 
-    for (int i = 0; i < file_list.count; ++i) {
+    // With no marked entries, act only on the current selection.
+    int first = marked_count > 0 ? 0 : file_list.selected;
+    int last = marked_count > 0 ? file_list.count - 1 : file_list.selected;
+
+    for (int i = first; i <= last; ++i) {
         if (marked_count > 0 && !file_list.entries[i].marked) continue;
         if (strcmp(file_list.entries[i].name, "..") == 0) continue;
 
@@ -519,8 +527,8 @@ static void run_command(const char *name);
 static const InternalCommand internal_commands[] = {
     {"open", "o", open_selected_file},
     {"rename", "r", command_rename},
-    {"delete", NULL, delete_selected_file},
-    {"trash", NULL, trash_selected_file},
+    {"delete", "Del", delete_selected_file},
+    {"trash", "BackSpace", trash_selected_file},
     {"search", "/", command_search},
     {"parent", "h", command_parent},
     {"enter", "l", command_enter},
