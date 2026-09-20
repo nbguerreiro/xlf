@@ -747,9 +747,11 @@ Directories and `..` are intentionally excluded.
 
 #### `handle_mouse_button(const XButtonEvent *ev, int win_width, int win_height)`
 
-Maps a left-button click to a file-list row.
+Maps a button click to a file-list row.
 
 A second click on the same row within the double-click time window opens the file or enters the directory.
+
+Right-click, or Ctrl-click on the left pane, opens the dmenu context menu for the clicked entry (enter/open, rename, delete, trash).
 
 The path bar itself is not treated as a selectable file row.
 

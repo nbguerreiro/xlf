@@ -34,7 +34,7 @@ it describes the old monolithic single-file `xlf.c` design, not the current modu
 - Keys: `j/k` move, `l` enter/open, `h` parent, `/` search, `r` rename, `o` open with xdg-open,
   `Del` permanent delete, `Backspace` trash (external `trash`), `Space` mark multi-select,
   `:` dmenu command menu, `q`/Esc quit.
-- `:` menu and Ctrl-click context menu need `dmenu` (override binary via `DMENU` env var).
+- `:` menu and right-click / Ctrl-click context menu need `dmenu` (override binary via `DMENU` env var).
 - Persistent command history: `$XDG_STATE_HOME/xlf/history` or `~/.local/state/xlf/history`
   (a pre-existing `fm/history` is migrated on first use).
 - `Makefile_novo` is a stale experimental variant (missing `history.c`, outputs `out`). Use `Makefile`.

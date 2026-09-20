@@ -714,31 +714,43 @@ static void show_context_menu(void) {
     free(selection);
 }
 
+static void context_menu_for_row(const XButtonEvent *ev, int win_width, int win_height) {
+    int left_width = (int)(win_width * PANE_RATIO);
+    if (ev->x >= left_width || ev->y < PATH_HEIGHT) return;
+
+    int list_y = ev->y - PATH_HEIGHT;
+    int visible_items = (win_height - PATH_HEIGHT) / LINE_HEIGHT;
+    if (visible_items <= 0 || file_list.count <= 0) return;
+
+    int scroll_offset = 0;
+    if (file_list.selected >= visible_items) {
+        scroll_offset = file_list.selected - visible_items + 1;
+    }
+
+    int row = list_y / LINE_HEIGHT;
+    int index = scroll_offset + row;
+    if (row < 0 || row >= visible_items || index < 0 || index >= file_list.count) return;
+    if (strcmp(file_list.entries[index].name, "..") == 0) return;
+
+    file_list.selected = index;
+    last_click_index = -1;
+    request_preview();
+    show_context_menu();
+}
+
 void handle_mouse_button(const XButtonEvent *ev, int win_width, int win_height) {
-    if (ev->button != Button1 || ev->x < 0 || ev->x >= win_width) return;
+    if (ev->x < 0 || ev->x >= win_width) return;
+
+    if (ev->button == Button3) {
+        context_menu_for_row(ev, win_width, win_height);
+        return;
+    }
+
+    if (ev->button != Button1) return;
 
     int left_width = (int)(win_width * PANE_RATIO);
     if ((ev->state & ControlMask) != 0) {
-        if (ev->x >= left_width || ev->y < PATH_HEIGHT) return;
-
-        int list_y = ev->y - PATH_HEIGHT;
-        int visible_items = (win_height - PATH_HEIGHT) / LINE_HEIGHT;
-        if (visible_items <= 0 || file_list.count <= 0) return;
-
-        int scroll_offset = 0;
-        if (file_list.selected >= visible_items) {
-            scroll_offset = file_list.selected - visible_items + 1;
-        }
-
-        int row = list_y / LINE_HEIGHT;
-        int index = scroll_offset + row;
-        if (row < 0 || row >= visible_items || index < 0 || index >= file_list.count) return;
-        if (strcmp(file_list.entries[index].name, "..") == 0) return;
-
-        file_list.selected = index;
-        last_click_index = -1;
-        request_preview();
-        show_context_menu();
+        context_menu_for_row(ev, win_width, win_height);
         return;
     }
 
